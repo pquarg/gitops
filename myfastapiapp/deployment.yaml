@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: myfastapiapp
-          image: myfastapiapp:v1
+          image: ghcr.io/pquarg/myfastapiapp:beb48d15e8d975bd9b66dde0c8212698e33f4c04
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
