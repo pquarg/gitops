@@ -5,7 +5,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: myfastapi-app.localhost
+    - host: myfastapiapp.localhost
       http:
         paths:
           - path: /
