@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myfastapiapp
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # Set this to the new deployment repository URL before applying this file.
+    repoURL: git@github.com:pquarg/deploy.git
+    targetRevision: HEAD
+    path: myfastapiapp
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      selfHeal: true

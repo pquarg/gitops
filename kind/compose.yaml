@@ -1,0 +1,17 @@
+services:
+  gateway:
+    image: haproxy:3.2.26-alpine
+    restart: unless-stopped
+    environment:
+      KIND_NODE: ${KIND_NODE:?Set KIND_NODE to a kind node container name}
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - kind
+
+networks:
+  kind:
+    external: true
+    name: kind

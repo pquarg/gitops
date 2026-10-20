@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: myfastapiapp
+spec:
+  type: ClusterIP
+  selector:
+    app: myfastapiapp
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
