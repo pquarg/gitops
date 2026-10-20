@@ -12,6 +12,8 @@ spec:
       labels:
         app: myfastapiapp
     spec:
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: myfastapiapp
           image: ghcr.io/pquarg/myfastapiapp:beb48d15e8d975bd9b66dde0c8212698e33f4c04
