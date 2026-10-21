@@ -13,7 +13,7 @@ spec:
         app: myfastapiapp
     spec:
       imagePullSecrets:
-        - name: ghcr-pull
+        - name: registry-credentials
       containers:
         - name: myfastapiapp
           image: ghcr.io/pquarg/myfastapiapp:0.1.1
