@@ -45,7 +45,7 @@ printf 'Applying the app Ingress for the initial local setup\n'
 kubectl --context="$context" --namespace=default apply -f "$project_root/myfastapiapp/ingress.yaml"
 kubectl --context="$context" --namespace=default wait \
   --for=jsonpath='{.status.loadBalancer.ingress[0].ip}'=127.0.0.1 \
-  ingress/myfastapiapp --timeout=60s
+  ingress/myfastapiapp-ingress --timeout=60s
 
 printf 'Open http://myfastapiapp.localhost/api/v1/docs/\n'
 printf 'Commit and push this deploy repository so Argo CD manages the app route.\n'

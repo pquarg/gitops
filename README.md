@@ -27,6 +27,36 @@ must be published to GHCR or loaded directly into the target kind cluster. For
 the private GHCR image configured in `myfastapiapp/deployment.yaml`, set up
 [registry authentication](#registry-authentication) before deploying the app.
 
+## Names and lookups
+
+Each Kubernetes object has a suffix describing its role. Names only need to
+match where a field explicitly references them:
+
+| Definition | Value | What uses it |
+| --- | --- | --- |
+| Argo CD Application `metadata.name` | `myfastapiapp-application` | Identifies the app in Argo CD; its `source.path` selects the manifest directory. |
+| Deployment `metadata.name` | `myfastapiapp-deployment` | The deploy script waits for this Deployment's rollout. |
+| Pod template label `app` | `myfastapiapp-pod` | Both the Deployment's `selector.matchLabels.app` and the Service's `selector.app` match this value. |
+| Container `name` | `myfastapiapp-container` | Identifies the container inside each Pod, for example when selecting logs. |
+| Service `metadata.name` | `myfastapiapp-service` | The Ingress's `backend.service.name` and the port-forward command reference this Service. |
+| Ingress `metadata.name` | `myfastapiapp-ingress` | The Ingress setup script waits for this Ingress. |
+
+The Service finds Pods using their labels; it does not look up the Deployment or
+container by name. `myfastapiapp-pod` is a label value; Kubernetes generates actual
+Pod names from the Deployment name. The Service sends traffic from port `80` to
+the container port named `http` (`8000` in `deployment.yaml`).
+
+Three other values have separate purposes: Argo CD's `source.path: myfastapiapp`
+looks up the `myfastapiapp/` directory in this repository;
+`ghcr.io/pquarg/myfastapiapp:0.1.1` identifies the published container image; and
+`myfastapiapp.localhost` is the request hostname matched by the Ingress.
+
+If a cluster already uses the original unsuffixed names, these renames create new
+resources. Retire the old Argo CD Application and its Deployment, Service, and
+Ingress as part of the transition, so two Applications do not manage the same
+directory and two Ingresses do not claim the same hostname. Editing these files
+alone does not change the cluster.
+
 ## Registry authentication
 
 The Deployment references a Kubernetes Secret with these settings:
@@ -124,19 +154,19 @@ apply its configuration after publishing and connecting the repository below.
    scoped to the previous app repository does not grant access to this new repo.
    See [Argo CD private repository access](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/).
 3. Once the manifests are pushed and the repository is accessible to Argo CD,
-   switch the live Application:
+   register the Application:
 
    ```sh
    kubectl --context kind-argocd-demo apply -f argocd/myfastapiapp.yaml
    kubectl --context kind-argocd-demo -n argocd get applications
    ```
 
-The Application keeps the name `myfastapiapp`, so it can continue managing the
-existing Deployment, Service, and Ingress. Its `automated` sync policy applies
-committed changes, and `selfHeal: true` restores managed resources that drift
-from Git. Push the manifests and connect this deployment repo before changing the
-old app repository's published layout, so Argo CD can switch to the new source
-first.
+The Application is named `myfastapiapp-application` and manages the manifests in
+`myfastapiapp/`. Its `automated` sync policy applies committed changes, and
+`selfHeal: true` restores managed resources that drift from Git. Push the
+manifests and connect this deployment repo before changing the old app
+repository's published layout. If replacing an existing unsuffixed Application,
+follow the transition note under [Names and lookups](#names-and-lookups).
 
 If Argo CD needs installing into a fresh cluster, follow the
 [Argo CD installation guide](https://argo-cd.readthedocs.io/en/stable/getting_started/).
@@ -181,8 +211,9 @@ http://myfastapiapp.localhost
   -> Docker HAProxy gateway:80
   -> kind node:30080
   -> Traefik Ingress controller
-  -> myfastapiapp Service / endpoints
-  -> FastAPI Pod:8000
+  -> myfastapiapp-ingress rule: backend.service.name
+  -> myfastapiapp-service:80: selector app=myfastapiapp-pod
+  -> matching Pod:8000 / myfastapiapp-container
 ```
 
 Open http://myfastapiapp.localhost/api/v1/docs/, or check:

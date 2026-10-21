@@ -1,17 +1,17 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: myfastapiapp
+  name: myfastapiapp-ingress
 spec:
   ingressClassName: traefik
   rules:
-    - host: myfastapiapp.localhost
+    - host: myfastapiapp.localhost # Matches the hostname in the browser's request.
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: myfastapiapp
+                name: myfastapiapp-service # Matches service.yaml's metadata.name.
                 port:
                   number: 80

@@ -24,11 +24,11 @@ project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 printf 'Deploying to context %s, namespace default\n' "$context"
 kubectl --context="$context" --namespace=default apply -k "$project_root/myfastapiapp"
 
-printf 'Waiting for myfastapiapp to become ready\n'
+printf 'Waiting for myfastapiapp-deployment to become ready\n'
 kubectl --context="$context" --namespace=default \
-  rollout status deployment/myfastapiapp --timeout=120s
+  rollout status deployment/myfastapiapp-deployment --timeout=120s
 
 printf 'Deployment ready. With local Ingress set up, open:\n'
 printf 'http://myfastapiapp.localhost/api/v1/docs/\n'
 printf 'For direct access through port-forward, run:\n'
-printf 'kubectl --context=%s --namespace=default port-forward service/myfastapiapp 8000:80\n' "$context"
+printf 'kubectl --context=%s --namespace=default port-forward service/myfastapiapp-service 8000:80\n' "$context"

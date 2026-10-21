@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: myfastapiapp
+  name: myfastapiapp-application # Name of the Argo CD Application itself.
   namespace: argocd
 spec:
   project: default
@@ -9,7 +9,7 @@ spec:
     # Set this to the new deployment repository URL before applying this file.
     repoURL: git@github.com:pquarg/deploy.git
     targetRevision: HEAD
-    path: myfastapiapp
+    path: myfastapiapp # Repository directory containing kustomization.yaml.
   destination:
     server: https://kubernetes.default.svc
     namespace: default
