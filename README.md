@@ -6,10 +6,11 @@ repositories.
 
 ```text
 myfastapiapp/
+  configmap.yaml         # Non-secret application configuration
   deployment.yaml        # Image, replica count, probes, and resource settings
   service.yaml           # Service port 80 -> app container port 8000
   ingress.yaml           # myfastapiapp.localhost -> app Service
-  kustomization.yaml     # Includes the three resources above
+  kustomization.yaml     # Includes the four resources above
 argocd/
   myfastapiapp.yaml       # App registration: this repository, path myfastapiapp
   traefik.yaml            # Shared controller installed from its Helm chart
@@ -38,6 +39,7 @@ match where a field explicitly references them:
 | Deployment `metadata.name` | `myfastapiapp-deployment` | The deploy script waits for this Deployment's rollout. |
 | Pod template label `app` | `myfastapiapp-pod` | Both the Deployment's `selector.matchLabels.app` and the Service's `selector.app` match this value. |
 | Container `name` | `myfastapiapp-container` | Identifies the container inside each Pod, for example when selecting logs. |
+| ConfigMap `metadata.name` | `myfastapiapp-config` | The Deployment's `env[].valueFrom.configMapKeyRef.name` references this ConfigMap. |
 | Service `metadata.name` | `myfastapiapp-service` | The Ingress's `backend.service.name` and the port-forward command reference this Service. |
 | Ingress `metadata.name` | `myfastapiapp-ingress` | The Ingress setup script waits for this Ingress. |
 
@@ -56,6 +58,29 @@ resources. Retire the old Argo CD Application and its Deployment, Service, and
 Ingress as part of the transition, so two Applications do not manage the same
 directory and two Ingresses do not claim the same hostname. Editing these files
 alone does not change the cluster.
+
+## Application configuration
+
+`myfastapiapp/configmap.yaml` stores `APP_MESSAGE`. The Deployment reads that key
+from `myfastapiapp-config` into the container's `APP_MESSAGE` environment variable.
+Kustomize includes the ConfigMap alongside the Deployment, Service, and Ingress,
+so both Argo CD and the manual deploy script apply it in the app's namespace.
+
+Edit the ConfigMap file, then commit and push for Argo CD to sync it. Once the
+updated ConfigMap has synced, use [Argo CD's Restart action](https://argo-cd.readthedocs.io/en/stable/operator-manual/resource_actions_builtin/) on
+`myfastapiapp-deployment` to make existing Pods pick up the new environment value.
+For a manual deployment without Argo CD, run:
+
+```sh
+kubectl --context kind-argocd-demo -n default apply -k myfastapiapp
+kubectl --context kind-argocd-demo -n default rollout restart deployment/myfastapiapp-deployment
+kubectl --context kind-argocd-demo -n default rollout status deployment/myfastapiapp-deployment --timeout=120s
+```
+
+This ConfigMap has a fixed name. Changing its data alone does not trigger a
+Deployment rollout, and running
+containers keep their previous environment values until their Pods are replaced.
+See [Kubernetes ConfigMap updates](https://kubernetes.io/docs/concepts/configuration/configmap/#mounted-configmaps-are-updated-automatically).
 
 ## Registry authentication
 

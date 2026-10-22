@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: myfastapiapp-deployment
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: myfastapiapp-pod # Matches template.metadata.labels below.
@@ -24,7 +24,10 @@ spec:
               containerPort: 8000
           env:
             - name: APP_MESSAGE
-              value: "Hello from FastAPI on kind!"
+              valueFrom:
+                configMapKeyRef:
+                  name: myfastapiapp-config
+                  key: APP_MESSAGE
           readinessProbe:
             httpGet:
               path: /health
