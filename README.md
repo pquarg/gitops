@@ -5,12 +5,16 @@ configuration. Application code and Dockerfiles belong in separate application
 repositories.
 
 ```text
+.github/workflows/
+  validate.yaml          # Configuration checks on GitHub-hosted runners
 myfastapiapp/
   configmap.yaml         # Non-secret application configuration
+  secrets.example.yaml   # Blank template for the local credential file
+  secrets.yaml           # Git-ignored credentials; apply separately
   deployment.yaml        # Image, replica count, probes, and resource settings
   service.yaml           # Service port 80 -> app container port 8000
   ingress.yaml           # myfastapiapp.localhost -> app Service
-  kustomization.yaml     # Includes the four resources above
+  kustomization.yaml     # Includes ConfigMap, Deployment, Service, and Ingress
 argocd/
   myfastapiapp.yaml       # App registration: this repository, path myfastapiapp
   traefik.yaml            # Shared controller installed from its Helm chart
@@ -40,6 +44,7 @@ match where a field explicitly references them:
 | Pod template label `app` | `myfastapiapp-pod` | Both the Deployment's `selector.matchLabels.app` and the Service's `selector.app` match this value. |
 | Container `name` | `myfastapiapp-container` | Identifies the container inside each Pod, for example when selecting logs. |
 | ConfigMap `metadata.name` | `myfastapiapp-config` | The Deployment's `env[].valueFrom.configMapKeyRef.name` references this ConfigMap. |
+| Application credential Secret name | `myfastapiapp-secrets` | The Deployment's `envFrom[].secretRef.name` references this separately provisioned Secret. |
 | Service `metadata.name` | `myfastapiapp-service` | The Ingress's `backend.service.name` and the port-forward command reference this Service. |
 | Ingress `metadata.name` | `myfastapiapp-ingress` | The Ingress setup script waits for this Ingress. |
 
@@ -81,6 +86,88 @@ This ConfigMap has a fixed name. Changing its data alone does not trigger a
 Deployment rollout, and running
 containers keep their previous environment values until their Pods are replaced.
 See [Kubernetes ConfigMap updates](https://kubernetes.io/docs/concepts/configuration/configmap/#mounted-configmaps-are-updated-automatically).
+
+## Application credentials
+
+Store local credentials in `myfastapiapp/secrets.yaml`, which `.gitignore`
+excludes from Git. Apply it manually to create the `myfastapiapp-secrets` Secret
+in namespace `default`. The Deployment imports its keys as environment variables
+through `envFrom`. The file contains plaintext credentials, so restrict its
+permissions to your user.
+
+On a fresh clone, create the local file from the blank template. The `-n` flag
+preserves an existing file if you rerun this command:
+
+```sh
+cp -n myfastapiapp/secrets.example.yaml myfastapiapp/secrets.yaml
+chmod 600 myfastapiapp/secrets.yaml
+git check-ignore myfastapiapp/secrets.yaml
+```
+
+The last command should print `myfastapiapp/secrets.yaml`. Edit that file in your
+editor and fill in `stringData.API_USERNAME` and `stringData.API_PASSWORD`.
+Keep the metadata name `myfastapiapp-secrets` and namespace `default` so they
+match the Deployment. Only the blank `secrets.example.yaml` belongs in Git.
+
+Apply the local file after filling in the values, before syncing the Deployment
+change or running `./scripts/deploy-kind.sh`:
+
+```sh
+kubectl --context kind-argocd-demo -n default apply -f myfastapiapp/secrets.yaml
+kubectl --context kind-argocd-demo -n default get secret myfastapiapp-secrets \
+  -o 'custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type'
+```
+
+The second command checks presence and type without displaying credentials.
+The Secret must exist before new app Pods can start. Argo CD manages the
+Deployment's reference; the Secret is provisioned separately. Keep both the
+local file and the example out of `myfastapiapp/kustomization.yaml`: Argo CD
+cannot read an untracked file, and the example has empty values. GitHub Actions
+continues to validate the tracked configuration without needing local secrets.
+
+After creating the Secret, commit and push the Deployment reference if it is not
+already published, then wait for Argo CD to sync it. The app code must read
+`API_USERNAME` and `API_PASSWORD` to use the credentials; this repository
+supplies the environment variables. To verify their presence without printing
+the values:
+
+```sh
+kubectl --context kind-argocd-demo -n default rollout status deployment/myfastapiapp-deployment --timeout=120s
+kubectl --context kind-argocd-demo -n default exec deployment/myfastapiapp-deployment -- \
+  python -c 'import os; print("Credentials present:", all(os.environ.get(k) for k in ("API_USERNAME", "API_PASSWORD")))'
+```
+
+When credentials change, edit the local file and rerun the apply command. Once
+it succeeds, use Argo CD's Restart action on `myfastapiapp-deployment`, or run:
+
+```sh
+kubectl --context kind-argocd-demo -n default rollout restart deployment/myfastapiapp-deployment
+kubectl --context kind-argocd-demo -n default rollout status deployment/myfastapiapp-deployment --timeout=120s
+```
+
+Editing the file alone does not update Kubernetes, and updating the Secret does
+not refresh environment variables in existing containers. Reapply the file after
+rebuilding the kind cluster. For another cluster or namespace, update the context
+and namespace in the file and commands as appropriate. See
+[Kubernetes Secret environment variables](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/).
+
+### Move to AWS CSI later
+
+For a later AWS Secrets Store CSI Driver integration, retain Secret name
+`myfastapiapp-secrets` and keys `API_USERNAME` and `API_PASSWORD`. Add a
+`SecretProviderClass` containing AWS references, configure its `secretObjects`
+mapping to create that Kubernetes Secret, and mount its CSI volume in the Pod.
+Secret synchronization requires the CSI volume mount even when the app only
+uses environment variables. Configure the AWS provider and workload IAM access
+for the target cluster. See the
+[CSI Secret synchronization documentation](https://secrets-store-csi-driver.sigs.k8s.io/topics/sync-as-kubernetes-secret).
+
+Stop manually applying the local Secret before CSI takes ownership.
+Plan the ownership handover: CSI manages the synced Secret's lifecycle and may
+require recreating the existing manually created Secret. The app's environment
+variable names and code can remain the same. If `secrets.yaml` becomes a
+reference-only `SecretProviderClass` manifest, remove its `.gitignore` entry
+before committing it, and ensure its contents contain references only.
 
 ## Registry authentication
 
