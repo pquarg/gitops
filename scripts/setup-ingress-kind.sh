@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   printf 'Usage: %s [cluster]\n' "${0##*/}"
-  printf 'Default: cluster=argocd-demo; requires Argo CD in namespace argocd\n'
+  printf 'Default: cluster=argocd-postgres; requires Argo CD in namespace argocd\n'
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -17,7 +17,7 @@ if (( $# > 1 )); then
   exit 1
 fi
 
-cluster="${1:-argocd-demo}"
+cluster="${1:-argocd-postgres}"
 context="kind-${cluster}"
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 nodes="$(kind get nodes --name "$cluster")"

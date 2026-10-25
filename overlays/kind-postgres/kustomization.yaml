@@ -5,8 +5,5 @@ resources:
   - postgres-storage.yaml
   - postgres-service.yaml
   - postgres-statefulset.yaml
-images:
-  - name: ghcr.io/pquarg/myfastapiapp
-    newTag: 0.1.5
 patches:
   - path: database-env.yaml

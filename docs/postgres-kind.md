@@ -1,8 +1,10 @@
 # Postgres in kind with data on your laptop
 
-Run commands from the `deploy` repository root. This walkthrough creates a second
-cluster named `argocd-postgres`; your existing `argocd-demo` cluster and Compose
-database can keep running. Docker Desktop needs enough resources for both clusters.
+Run commands from the `deploy` repository root. This walkthrough uses one kind
+cluster, `argocd-postgres`, containing FastAPI, Postgres, Argo CD, and Traefik.
+The app is available at `myfastapiapp.localhost` and Argo CD at `localhost:8080`.
+For an already configured cluster, skip creation and installation steps; use Git
+and Argo CD sync for routine changes.
 
 The new database starts empty. Existing Compose records stay in that database's
 named Docker volume; they are not copied by these manifests.
@@ -56,9 +58,10 @@ laptop folder. See [local volumes](https://kubernetes.io/docs/concepts/storage/v
 | `overlays/kind-postgres/postgres-storage.yaml` | Fixed PV and PVC; `Retain` policy |
 | `overlays/kind-postgres/postgres-service.yaml` | Internal database DNS name and port |
 | `overlays/kind-postgres/postgres-statefulset.yaml` | Postgres 17, probes, and data mount |
-| `overlays/kind-postgres/database-env.yaml` | App database environment variable and memory settings |
-| `overlays/kind-postgres/kustomization.yaml` | Combines the base app and database; selects app image `0.1.5` |
-| `argocd/myfastapiapp-postgres.yaml` | Argo CD Application targeting the overlay |
+| `overlays/kind-postgres/database-env.yaml` | Required app database environment variable |
+| `overlays/kind-postgres/kustomization.yaml` | Combines the base app and database |
+| `myfastapiapp/deployment.yaml` | App image `0.1.5`, probes, and resource settings |
+| `argocd/myfastapiapp.yaml` | Argo CD Application targeting the overlay |
 
 ## 1. Choose the laptop directory
 
@@ -82,12 +85,14 @@ The local config is Git-ignored because its path belongs to your machine.
 
 ```sh
 kind create cluster --name argocd-postgres --config kind/postgres-config.local.yaml
+kubectl config use-context kind-argocd-postgres
 kubectl --context kind-argocd-postgres get nodes --show-labels
 ```
 
 Host mounts are configured at cluster creation. Applying Kubernetes YAML to an
-existing cluster cannot add this Docker mount. The walkthrough uses a new cluster
-to avoid rebuilding the working one. See [kind extra mounts](https://kind.sigs.k8s.io/docs/user/configuration/#extra-mounts).
+existing cluster cannot add this Docker mount. Create the cluster with the
+configuration above so the data directory is available from its first deployment.
+See [kind extra mounts](https://kind.sigs.k8s.io/docs/user/configuration/#extra-mounts).
 
 ## 3. Create the database secrets
 
@@ -108,16 +113,16 @@ Choose one password and enter it in both local files in your editor:
 - `app-secrets.yaml`: set `stringData.AUTH_DATABASE_URL` to
   `postgresql://myfastapiapp:YOUR_PASSWORD@myfastapiapp-postgres-service:5432/myfastapiapp`.
 
-These files are separate from `myfastapiapp/secrets.yaml`, which belongs to the
-existing cluster. The current authentication code does not use the legacy
-`API_USERNAME` and `API_PASSWORD` keys. The `cp -n` commands preserve existing files.
+These are the app and database Secret files for the single cluster. The app
+does not use the legacy `API_USERNAME` and `API_PASSWORD` keys. The `cp -n`
+commands preserve existing files.
 
 A password manager can generate a hex password, or you can run
 `openssl rand -hex 24`. Hex avoids URL escaping issues. If you use special
 characters instead, URL-encode the password in `AUTH_DATABASE_URL` while keeping
 the original password in `POSTGRES_PASSWORD`.
 
-Apply both files to the new cluster:
+Apply both files to the cluster:
 
 ```sh
 kubectl --context kind-argocd-postgres -n default apply \
@@ -139,10 +144,10 @@ uv lock --project ../apps/myfastapiapp
 
 Docker uses `uv sync --locked`, which fails if the lockfile still records an older
 project version. Commit the refreshed lockfile with the app release. If you choose
-a different app version, update `images[].newTag` in the overlay's
-`kustomization.yaml` and the build/load commands below to match it.
+a different app version, update `image` in `myfastapiapp/deployment.yaml` and
+the build/load commands below to match it.
 
-The overlay selects `ghcr.io/pquarg/myfastapiapp:0.1.5`. Ensure that version has been
+The Deployment selects `ghcr.io/pquarg/myfastapiapp:0.1.5`. Ensure that version has been
 published: a successful checks job can still have a skipped image job. If a version
 bump failed CI and a later lockfile fix passed, use the app repository's **CI ->
 Run workflow** action on `main` to retry publishing that version after all checks
@@ -157,28 +162,10 @@ gh run list --repo pquarg/myfastapiapp --workflow ci.yaml --limit 3
 
 Confirm the **Build image and publish version changes** job succeeds before
 relying on the registry. For a private image, provision `registry-credentials` in
-the new cluster using the [registry authentication instructions](../README.md#registry-authentication),
-changing the context in those instructions to `kind-argocd-postgres`.
-
-If the existing cluster's registry credential is still valid, you can copy it
-directly without printing or saving its value:
-
-```sh
-kubectl --context kind-argocd-demo -n default get secret registry-credentials -o json |
-  python3 -c '
-import json
-import sys
-
-source = json.load(sys.stdin)
-secret = {key: source[key] for key in ("apiVersion", "kind", "type", "data")}
-secret["metadata"] = {"name": "registry-credentials", "namespace": "default"}
-json.dump(secret, sys.stdout)
-' |
-  kubectl --context kind-argocd-postgres -n default apply -f -
-```
+the cluster using the [registry authentication instructions](../README.md#registry-authentication).
 
 For a local image build instead, the following uses the adjacent app repository
-and loads the exact image name selected by the overlay:
+and loads the exact image name selected by the Deployment:
 
 ```sh
 docker build --provenance=false -t ghcr.io/pquarg/myfastapiapp:0.1.5 ../apps/myfastapiapp
@@ -231,10 +218,10 @@ kubectl --context kind-argocd-postgres -n default \
 ```
 
 Open http://localhost:18000/api/v1/docs/. Register a test account, then log in.
-This port-forward targets the new cluster; `myfastapiapp.localhost` still points
-through your existing gateway to the original cluster.
+This is a direct app connection for the initial check. Step 7 sets up
+`myfastapiapp.localhost` through the cluster's shared gateway.
 
-Replace the new database Pod:
+Replace the database Pod:
 
 ```sh
 kubectl --context kind-argocd-postgres -n default delete pod \
@@ -246,33 +233,23 @@ Once the replacement database Pod shows `1/1 Running`, press Ctrl+C to stop the
 watch and log in with the same account. It should still exist. This verifies that
 data is stored outside the replaced Pod.
 
-## 7. Let Argo CD manage the overlay
+## 7. Install Argo CD and expose the app
 
-First commit and push the new overlay and its Argo CD Application, together with
-the example files and documentation you want to keep. Review the staged changes;
-the filled Secret files and machine-specific kind config must remain ignored.
-The original Application still targets the base path `myfastapiapp`; this new
-Application targets `overlays/kind-postgres` in the new cluster.
-
-The base Deployment stays on the existing cluster's working `0.1.1` image and
-resource settings. Stage this setup with:
+Commit and push the manifests, example files, scripts, and documentation. Review
+staged changes; filled Secret files and the local kind configuration stay ignored.
+There is one app registration, `argocd/myfastapiapp.yaml`, targeting the complete
+`overlays/kind-postgres` deployment.
 
 ```sh
-git add .github/workflows/validate.yaml .gitignore README.md \
-  argocd/myfastapiapp-postgres.yaml docs/postgres-kind.md \
-  kind/postgres-config.example.yaml \
-  overlays/kind-postgres
+git add -A
 git diff --cached
-git commit -m "Add Postgres kind overlay with laptop-backed storage"
+git commit -m "Consolidate local deployment onto one kind cluster"
 git push
 ```
 
-The overlay selects the Postgres app image and memory settings independently of
-the base Deployment. Publishing it does not upgrade the existing cluster's app.
-
-Install Argo CD into the new cluster following its [installation guide](https://argo-cd.readthedocs.io/en/stable/getting_started/#1-install-argo-cd),
-using `--context kind-argocd-postgres` on each kubectl command. These commands pin
-`v3.5.5`, matching the existing cluster:
+On a fresh cluster, install Argo CD following its
+[installation guide](https://argo-cd.readthedocs.io/en/stable/getting_started/#1-install-argo-cd).
+The commands below pin `v3.5.5`. Skip installation if Argo CD is already running.
 
 ```sh
 kubectl --context kind-argocd-postgres create namespace argocd
@@ -281,43 +258,42 @@ kubectl --context kind-argocd-postgres -n argocd apply --server-side \
 kubectl --context kind-argocd-postgres -n argocd rollout status \
   deployment/argocd-server --timeout=300s
 kubectl --context kind-argocd-postgres -n argocd \
-  port-forward service/argocd-server 18080:443
+  port-forward service/argocd-server 8080:443
 ```
 
-Keep the port-forward running and open https://localhost:18080. Follow the Argo CD
-guide to retrieve the initial admin password and log in. Connect
-`git@github.com:pquarg/deploy.git` under **Settings -> Repositories**, using a
-read-only Git credential that can access this repository. The new Argo CD install
-does not inherit the old install's repository credentials.
+Keep the port-forward running and open https://localhost:8080. Sign in as `admin`,
+using this cluster's password. Retrieve the initial password on a fresh install
+as described in [Open the app and Argo CD](../README.md#open-the-app-and-argo-cd).
+Connect `git@github.com:pquarg/deploy.git` under **Settings -> Repositories**, using
+a read-only Git credential that can access this repository.
 
-In another terminal, install the existing Traefik configuration into this cluster
-so it can handle the overlay's Ingress and report its address:
+Register the app, then set up the shared controller and gateway:
 
 ```sh
-kubectl --context kind-argocd-postgres apply -f argocd/traefik.yaml
+kubectl --context kind-argocd-postgres apply -f argocd/myfastapiapp.yaml
 kubectl --context kind-argocd-postgres -n argocd wait \
-  --for=jsonpath='{.status.sync.status}'=Synced application/traefik --timeout=300s
-kubectl --context kind-argocd-postgres -n traefik rollout status \
-  deployment/traefik --timeout=300s
-```
-
-Next, register the application:
-
-```sh
-kubectl --context kind-argocd-postgres apply -f argocd/myfastapiapp-postgres.yaml
+  --for=jsonpath='{.status.sync.status}'=Synced \
+  application/myfastapiapp-postgres-application --timeout=300s
+./scripts/setup-ingress-kind.sh
 kubectl --context kind-argocd-postgres -n argocd get applications
 ```
 
-Argo CD applies storage first, waits for Postgres to become healthy, then applies
-the app. The Secrets must already exist. Routine changes now go through Git and
-Argo CD sync. Avoid registering both app Applications in the same cluster:
-they would manage the same base resources.
+The app Application retains the name `myfastapiapp-postgres-application`. It
+manages FastAPI and Postgres together. Argo CD applies storage first, waits for
+Postgres to become healthy, then applies the app. The Secrets must already exist.
+The separate `traefik` Application manages the shared Ingress controller.
 
-Continue using port-forward for app access. If you later want
-`myfastapiapp.localhost` to target the new cluster, stop the original Docker gateway
-and run `./scripts/setup-ingress-kind.sh argocd-postgres`. Only one gateway can
-publish localhost port 80. The existing Compose database is unrelated to that
-gateway.
+Open http://myfastapiapp.localhost/api/v1/docs/ or verify:
+
+```sh
+curl http://myfastapiapp.localhost/health
+curl http://myfastapiapp.localhost/api/v1/docs/openapi.json
+```
+
+Routine changes now go through Git and Argo CD sync. The gateway publishes
+localhost port 80 and forwards to `argocd-postgres-control-plane`. Keep Docker
+Desktop and the cluster running. A separate Compose database used for app
+development has its own volume and is independent of this Kubernetes database.
 
 ## What happens on a cluster rebuild
 

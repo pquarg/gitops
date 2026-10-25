@@ -1,181 +1,147 @@
-# Kubernetes deployments
+# Local Kubernetes deployment
 
-An independent Git repository containing Kubernetes manifests and local platform
-configuration. Application code and Dockerfiles belong in separate application
-repositories.
+This repository runs FastAPI and Postgres in one kind cluster, `argocd-postgres`.
+The cluster contains one Argo CD installation and one shared Traefik controller.
+Postgres data lives in a laptop directory mounted into the kind node. Application
+code and Dockerfiles belong in the separate `../apps/myfastapiapp` repository.
 
-For Postgres in kind with data stored in a laptop directory, follow the
-[Postgres walkthrough](docs/postgres-kind.md). It uses a separate overlay and a
-second cluster, `argocd-postgres`, so the existing `argocd-demo` setup can keep
-running. The base manifests below do not provision a database.
+For a fresh setup or cluster rebuild, follow the [Postgres walkthrough](docs/postgres-kind.md).
+Commands here run from this deployment repository's root. Docker Desktop, kind,
+kubectl, and Docker Compose are required.
+
+| Setting | Value |
+| --- | --- |
+| kind cluster | `argocd-postgres` |
+| kubectl context | `kind-argocd-postgres` |
+| Application namespace | `default` |
+| FastAPI Argo CD Application | `myfastapiapp-postgres-application` |
+| Argo CD source path | `overlays/kind-postgres` |
+| App URL | http://myfastapiapp.localhost/api/v1/docs/ |
+| Argo CD UI | https://localhost:8080 |
 
 ```text
-.github/workflows/
-  validate.yaml          # Configuration checks on GitHub-hosted runners
-myfastapiapp/
-  configmap.yaml         # Non-secret application configuration
-  secrets.example.yaml   # Blank template for the local credential file
-  secrets.yaml           # Git-ignored credentials; apply separately
-  deployment.yaml        # Image, replica count, probes, and resource settings
-  service.yaml           # Service port 80 -> app container port 8000
-  ingress.yaml           # myfastapiapp.localhost -> app Service
-  kustomization.yaml     # Includes ConfigMap, Deployment, Service, and Ingress
+myfastapiapp/                 # App image, configuration, Service, and Ingress
+  deployment.yaml            # Current app version and resource settings
+  kustomization.yaml         # Base resources imported by the Postgres overlay
+overlays/kind-postgres/       # Complete app and database deployment
+  kustomization.yaml
+  database-env.yaml          # Required AUTH_DATABASE_URL Secret reference
+  app-secrets.example.yaml   # Blank app Secret template
+  postgres-secrets.example.yaml
+  postgres-storage.yaml      # Laptop-backed PV/PVC with retention
+  postgres-statefulset.yaml
+  postgres-service.yaml
 argocd/
-  myfastapiapp.yaml       # App registration: this repository, path myfastapiapp
-  traefik.yaml            # Shared controller installed from its Helm chart
+  myfastapiapp.yaml           # Registers the app and Postgres overlay
+  traefik.yaml                # Registers the shared Ingress controller
 kind/
-  compose.yaml            # Docker gateway publishing localhost port 80
-  haproxy.cfg             # TCP forwarding into the kind node
+  postgres-config.example.yaml
+  postgres-config.local.yaml # Git-ignored laptop storage path
+  compose.yaml               # Gateway on localhost port 80
+  haproxy.cfg
 scripts/
-  deploy-kind.sh          # Manual local deployment helper
-  setup-ingress-kind.sh   # Shared controller, gateway, and initial app route
+  deploy-kind.sh             # Manual bootstrap of the complete overlay
+  setup-ingress-kind.sh      # Traefik and the app gateway
 ```
 
-Commands below run from this deployment repository's root. Docker Desktop, kind,
-and kubectl are required; Ingress setup also uses Docker Compose. The app image
-must be published to GHCR or loaded directly into the target kind cluster. For
-the private GHCR image configured in `myfastapiapp/deployment.yaml`, set up
-[registry authentication](#registry-authentication) before deploying the app.
+The deployment entry point is `overlays/kind-postgres`. Both helper scripts
+select `argocd-postgres` by default. The base directory is included by the overlay;
+register only `argocd/myfastapiapp.yaml` for the FastAPI application.
 
-## Names and lookups
+## Open the app and Argo CD
 
-Each Kubernetes object has a suffix describing its role. Names only need to
-match where a field explicitly references them:
+Select the cluster:
 
-| Definition | Value | What uses it |
+```sh
+kubectl config use-context kind-argocd-postgres
+```
+
+With Argo CD and the app deployed, start or refresh the app gateway:
+
+```sh
+./scripts/setup-ingress-kind.sh
+```
+
+Open http://myfastapiapp.localhost/api/v1/docs/. The request follows this route:
+
+```text
+myfastapiapp.localhost:80
+  -> Docker HAProxy gateway
+  -> argocd-postgres-control-plane:30080
+  -> Traefik
+  -> myfastapiapp-service:80
+  -> FastAPI Pod:8000
+```
+
+To open Argo CD, keep this running in a terminal:
+
+```sh
+kubectl --context kind-argocd-postgres -n argocd \
+  port-forward service/argocd-server 8080:443
+```
+
+Open https://localhost:8080 and sign in as `admin`. Use the password belonging to
+this cluster. On a fresh installation, retrieve its initial password with:
+
+```sh
+kubectl --context kind-argocd-postgres -n argocd \
+  get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d
+printf '\n'
+```
+
+If you have changed the admin password, use the replacement password. The UI
+port-forward and the app's HTTP gateway are independent connections.
+
+## App configuration and credentials
+
+`myfastapiapp/configmap.yaml` supplies `APP_MESSAGE`. The app's image and memory
+settings live in `myfastapiapp/deployment.yaml`. The overlay adds Postgres and
+requires `AUTH_DATABASE_URL` from the `myfastapiapp-secrets` Secret.
+
+Provision these local files separately from Argo CD:
+
+| Git-ignored file | Kubernetes Secret | Required value |
 | --- | --- | --- |
-| Argo CD Application `metadata.name` | `myfastapiapp-application` | Identifies the app in Argo CD; its `source.path` selects the manifest directory. |
-| Deployment `metadata.name` | `myfastapiapp-deployment` | The deploy script waits for this Deployment's rollout. |
-| Pod template label `app` | `myfastapiapp-pod` | Both the Deployment's `selector.matchLabels.app` and the Service's `selector.app` match this value. |
-| Container `name` | `myfastapiapp-container` | Identifies the container inside each Pod, for example when selecting logs. |
-| ConfigMap `metadata.name` | `myfastapiapp-config` | The Deployment's `env[].valueFrom.configMapKeyRef.name` references this ConfigMap. |
-| Application credential Secret name | `myfastapiapp-secrets` | The Deployment's `envFrom[].secretRef.name` references this separately provisioned Secret. |
-| Service `metadata.name` | `myfastapiapp-service` | The Ingress's `backend.service.name` and the port-forward command reference this Service. |
-| Ingress `metadata.name` | `myfastapiapp-ingress` | The Ingress setup script waits for this Ingress. |
+| `overlays/kind-postgres/app-secrets.yaml` | `myfastapiapp-secrets` | `AUTH_DATABASE_URL` |
+| `overlays/kind-postgres/postgres-secrets.yaml` | `myfastapiapp-postgres-secrets` | `POSTGRES_PASSWORD` |
 
-The Service finds Pods using their labels; it does not look up the Deployment or
-container by name. `myfastapiapp-pod` is a label value; Kubernetes generates actual
-Pod names from the Deployment name. The Service sends traffic from port `80` to
-the container port named `http` (`8000` in `deployment.yaml`).
+Follow [Create the database secrets](docs/postgres-kind.md#3-create-the-database-secrets)
+for the templates and matching password. Keep filled files at mode `600` and out
+of Kustomize and Git. The app no longer uses `API_USERNAME` or `API_PASSWORD`.
 
-Three other values have separate purposes: Argo CD's `source.path: myfastapiapp`
-looks up the `myfastapiapp/` directory in this repository;
-`ghcr.io/pquarg/myfastapiapp:0.1.1` identifies the published container image; and
-`myfastapiapp.localhost` is the request hostname matched by the Ingress.
-
-If a cluster already uses the original unsuffixed names, these renames create new
-resources. Retire the old Argo CD Application and its Deployment, Service, and
-Ingress as part of the transition, so two Applications do not manage the same
-directory and two Ingresses do not claim the same hostname. Editing these files
-alone does not change the cluster.
-
-## Application configuration
-
-`myfastapiapp/configmap.yaml` stores `APP_MESSAGE`. The Deployment reads that key
-from `myfastapiapp-config` into the container's `APP_MESSAGE` environment variable.
-Kustomize includes the ConfigMap alongside the Deployment, Service, and Ingress,
-so both Argo CD and the manual deploy script apply it in the app's namespace.
-
-Edit the ConfigMap file, then commit and push for Argo CD to sync it. Once the
-updated ConfigMap has synced, use [Argo CD's Restart action](https://argo-cd.readthedocs.io/en/stable/operator-manual/resource_actions_builtin/) on
-`myfastapiapp-deployment` to make existing Pods pick up the new environment value.
-For a manual deployment without Argo CD, run:
+Apply an edited local Secret with:
 
 ```sh
-kubectl --context kind-argocd-demo -n default apply -k myfastapiapp
-kubectl --context kind-argocd-demo -n default rollout restart deployment/myfastapiapp-deployment
-kubectl --context kind-argocd-demo -n default rollout status deployment/myfastapiapp-deployment --timeout=120s
+kubectl --context kind-argocd-postgres -n default apply \
+  -f overlays/kind-postgres/app-secrets.yaml \
+  -f overlays/kind-postgres/postgres-secrets.yaml
 ```
 
-This ConfigMap has a fixed name. Changing its data alone does not trigger a
-Deployment rollout, and running
-containers keep their previous environment values until their Pods are replaced.
-See [Kubernetes ConfigMap updates](https://kubernetes.io/docs/concepts/configuration/configmap/#mounted-configmaps-are-updated-automatically).
-
-## Application credentials
-
-Store local credentials in `myfastapiapp/secrets.yaml`, which `.gitignore`
-excludes from Git. Apply it manually to create the `myfastapiapp-secrets` Secret
-in namespace `default`. The Deployment imports its keys as environment variables
-through `envFrom`. The file contains plaintext credentials, so restrict its
-permissions to your user.
-
-On a fresh clone, create the local file from the blank template. The `-n` flag
-preserves an existing file if you rerun this command:
+Changing a Secret or ConfigMap does not refresh environment variables in running
+Pods. After applying a Secret change or syncing a ConfigMap change, restart the
+app through Argo CD's Restart action or run:
 
 ```sh
-cp -n myfastapiapp/secrets.example.yaml myfastapiapp/secrets.yaml
-chmod 600 myfastapiapp/secrets.yaml
-git check-ignore myfastapiapp/secrets.yaml
+kubectl --context kind-argocd-postgres -n default \
+  rollout restart deployment/myfastapiapp-deployment
+kubectl --context kind-argocd-postgres -n default \
+  rollout status deployment/myfastapiapp-deployment --timeout=180s
 ```
 
-The last command should print `myfastapiapp/secrets.yaml`. Edit that file in your
-editor and fill in `stringData.API_USERNAME` and `stringData.API_PASSWORD`.
-The base Deployment stays on `0.1.1`. The newer account-based application uses
-Postgres through `AUTH_DATABASE_URL`; its overlay has separate local Secret files
-as described in the [walkthrough](docs/postgres-kind.md#3-create-the-database-secrets).
-Keep the metadata name `myfastapiapp-secrets` and namespace `default` so they
-match the Deployment. Only the blank `secrets.example.yaml` belongs in Git.
-
-Apply the local file after filling in the values, before syncing the Deployment
-change or running `./scripts/deploy-kind.sh`:
-
-```sh
-kubectl --context kind-argocd-demo -n default apply -f myfastapiapp/secrets.yaml
-kubectl --context kind-argocd-demo -n default get secret myfastapiapp-secrets \
-  -o 'custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type'
-```
-
-The second command checks presence and type without displaying credentials.
-The Secret must exist before new app Pods can start. Argo CD manages the
-Deployment's reference; the Secret is provisioned separately. Keep both the
-local file and the example out of `myfastapiapp/kustomization.yaml`: Argo CD
-cannot read an untracked file, and the example has empty values. GitHub Actions
-continues to validate the tracked configuration without needing local secrets.
-
-After creating the Secret, commit and push the Deployment reference if it is not
-already published, then wait for Argo CD to sync it. The app code must read
-`API_USERNAME` and `API_PASSWORD` to use the credentials; this repository
-supplies the environment variables. To verify their presence without printing
-the values:
-
-```sh
-kubectl --context kind-argocd-demo -n default rollout status deployment/myfastapiapp-deployment --timeout=120s
-kubectl --context kind-argocd-demo -n default exec deployment/myfastapiapp-deployment -- \
-  python -c 'import os; print("Credentials present:", all(os.environ.get(k) for k in ("API_USERNAME", "API_PASSWORD")))'
-```
-
-When credentials change, edit the local file and rerun the apply command. Once
-it succeeds, use Argo CD's Restart action on `myfastapiapp-deployment`, or run:
-
-```sh
-kubectl --context kind-argocd-demo -n default rollout restart deployment/myfastapiapp-deployment
-kubectl --context kind-argocd-demo -n default rollout status deployment/myfastapiapp-deployment --timeout=120s
-```
-
-Editing the file alone does not update Kubernetes, and updating the Secret does
-not refresh environment variables in existing containers. Reapply the file after
-rebuilding the kind cluster. For another cluster or namespace, update the context
-and namespace in the file and commands as appropriate. See
-[Kubernetes Secret environment variables](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/).
+`POSTGRES_PASSWORD` initializes a new database. For existing data, changing that
+Secret alone does not rotate the database role's password; follow the
+[recovery guidance](docs/postgres-kind.md#what-happens-on-a-cluster-rebuild).
 
 ### Move to AWS CSI later
 
 For a later AWS Secrets Store CSI Driver integration, retain Secret name
-`myfastapiapp-secrets` and keys `API_USERNAME` and `API_PASSWORD`. Add a
-`SecretProviderClass` containing AWS references, configure its `secretObjects`
-mapping to create that Kubernetes Secret, and mount its CSI volume in the Pod.
-Secret synchronization requires the CSI volume mount even when the app only
-uses environment variables. Configure the AWS provider and workload IAM access
-for the target cluster. See the
-[CSI Secret synchronization documentation](https://secrets-store-csi-driver.sigs.k8s.io/topics/sync-as-kubernetes-secret).
-
-Stop manually applying the local Secret before CSI takes ownership.
-Plan the ownership handover: CSI manages the synced Secret's lifecycle and may
-require recreating the existing manually created Secret. The app's environment
-variable names and code can remain the same. If `secrets.yaml` becomes a
-reference-only `SecretProviderClass` manifest, remove its `.gitignore` entry
-before committing it, and ensure its contents contain references only.
+`myfastapiapp-secrets` and key `AUTH_DATABASE_URL`. Add a `SecretProviderClass`
+with AWS references, configure its `secretObjects` mapping, mount the CSI volume
+in the app Pod, and configure workload IAM access. The volume mount is required
+even when the app consumes the synchronized Secret as environment variables.
+Plan the handover from manually provisioned Secrets because CSI manages their
+lifecycle. See [CSI Secret synchronization](https://secrets-store-csi-driver.sigs.k8s.io/topics/sync-as-kubernetes-secret).
 
 ## Registry authentication
 
@@ -183,7 +149,7 @@ The Deployment references a Kubernetes Secret with these settings:
 
 | Setting | Value |
 | --- | --- |
-| Cluster context | `kind-argocd-demo` |
+| Cluster context | `kind-argocd-postgres` |
 | Secret name | `registry-credentials` |
 | Namespace | `default` (the same namespace as the app) |
 | Secret type | `kubernetes.io/dockerconfigjson` |
@@ -224,17 +190,17 @@ secret = {
     "kind": "Secret",
     "metadata": {"name": "registry-credentials", "namespace": "default"},
     "type": "kubernetes.io/dockerconfigjson",
-    "data": {".dockerconfigjson": base64.b64encode(config.  encode()).decode()},
+    "data": {".dockerconfigjson": base64.b64encode(config.encode()).decode()},
 }
 json.dump(secret, sys.stdout)
 ' YOUR_GITHUB_USERNAME |
-  kubectl --context kind-argocd-demo -n default apply -f -
+  kubectl --context kind-argocd-postgres -n default apply -f -
 ```
 
 To confirm the Secret exists without displaying its credentials:
 
 ```sh
-kubectl --context kind-argocd-demo -n default get secret registry-credentials \
+kubectl --context kind-argocd-postgres -n default get secret registry-credentials \
   -o 'custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type'
 ```
 
@@ -253,136 +219,73 @@ repositories: a Kubernetes Secret's base64 encoding is reversible. See
 
 ## Publish manifests and connect Argo CD
 
-The GitHub repository is [pquarg/deploy](https://github.com/pquarg/deploy). The
-local `origin` remote and `repoURL` in `argocd/myfastapiapp.yaml` are already set
-to `git@github.com:pquarg/deploy.git`. The Application uses `path: myfastapiapp`,
-relative to this repository's root.
+The repository is [pquarg/deploy](https://github.com/pquarg/deploy). The Application
+in `argocd/myfastapiapp.yaml` uses `git@github.com:pquarg/deploy.git`, follows
+`HEAD`, and renders `overlays/kind-postgres`. Its name remains
+`myfastapiapp-postgres-application` so the existing Application keeps ownership
+of the same resources.
 
-Publishing files does not switch the live Argo CD Application to this repository;
-apply its configuration after publishing and connecting the repository below.
+After committing and pushing the deployment files, connect the private repository
+under Argo CD **Settings -> Repositories**. Its Git credential is separate from
+the app image's `registry-credentials` Secret. See
+[Argo CD repository access](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/).
 
-1. Commit and push the deployment files:
+Register the app once its Secrets and image are available:
 
-   ```sh
-   git add -A
-   git commit -m "Add Kubernetes deployments and local kind infrastructure"
-   git push -u origin main
-   ```
+```sh
+kubectl --context kind-argocd-postgres apply -f argocd/myfastapiapp.yaml
+kubectl --context kind-argocd-postgres -n argocd get applications
+```
 
-2. For a private repository, add its credentials in Argo CD under
-   **Settings -> Repositories -> Connect Repo**. A read-only GitHub deploy key
-   scoped to the previous app repository does not grant access to this new repo.
-   See [Argo CD private repository access](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/).
-3. Once the manifests are pushed and the repository is accessible to Argo CD,
-   register the Application:
+Automatic sync applies committed changes; `selfHeal: true` restores managed
+resources that drift from Git. The `traefik` Application manages the shared
+controller separately. On a fresh cluster, follow the
+[installation steps](docs/postgres-kind.md#7-install-argo-cd-and-expose-the-app).
 
-   ```sh
-   kubectl --context kind-argocd-demo apply -f argocd/myfastapiapp.yaml
-   kubectl --context kind-argocd-demo -n argocd get applications
-   ```
+## Manual deployment and validation
 
-The Application is named `myfastapiapp-application` and manages the manifests in
-`myfastapiapp/`. Its `automated` sync policy applies committed changes, and
-`selfHeal: true` restores managed resources that drift from Git. Push the
-manifests and connect this deployment repo before changing the old app
-repository's published layout. If replacing an existing unsuffixed Application,
-follow the transition note under [Names and lookups](#names-and-lookups).
-
-If Argo CD needs installing into a fresh cluster, follow the
-[Argo CD installation guide](https://argo-cd.readthedocs.io/en/stable/getting_started/).
-The existing local `argocd-demo` cluster already has it installed.
-
-## Local deployment without Argo CD
-
-For an initial manual check in a cluster that is not managing this app through
-Argo CD:
+For initial bootstrap before Argo CD manages the app:
 
 ```sh
 ./scripts/deploy-kind.sh
 ```
 
-The default cluster is `argocd-demo` and the namespace is `default`. An optional
-argument selects another kind cluster. The script applies `myfastapiapp/` with
-Kustomize and waits up to 120 seconds for the Deployment rollout. Once Argo CD
-manages the app, use Git commits and sync for routine updates.
+The script deploys `overlays/kind-postgres`, waits for Postgres, then waits for
+FastAPI. It accepts an optional kind cluster name; that cluster must have the
+storage mount and separately provisioned Secrets. Once Argo CD owns the app,
+use Git commits and sync for routine changes.
 
-To preview the manifests or validate them without persisting resources:
-
-```sh
-kubectl kustomize myfastapiapp
-kubectl --context kind-argocd-demo -n default apply --dry-run=server -k myfastapiapp
-```
-
-## Shared local Ingress
-
-With Argo CD installed and the app running:
+To preview and validate resources without persisting changes:
 
 ```sh
-./scripts/setup-ingress-kind.sh
+kubectl kustomize overlays/kind-postgres
+kubectl --context kind-argocd-postgres -n default \
+  apply --dry-run=server -k overlays/kind-postgres
 ```
 
-An optional argument selects another kind cluster. The script registers a
-`traefik` Application using the official Helm chart pinned to `42.0.0`, waits for
-its controller, starts the shared Docker gateway, and applies the initial app
-Ingress. The setup requires a free localhost port 80.
-
-```text
-http://myfastapiapp.localhost
-  -> Docker HAProxy gateway:80
-  -> kind node:30080
-  -> Traefik Ingress controller
-  -> myfastapiapp-ingress rule: backend.service.name
-  -> myfastapiapp-service:80: selector app=myfastapiapp-pod
-  -> matching Pod:8000 / myfastapiapp-container
-```
-
-Open http://myfastapiapp.localhost/api/v1/docs/, or check:
+To refresh or stop the HTTP gateway directly:
 
 ```sh
-curl http://myfastapiapp.localhost/health
-curl http://myfastapiapp.localhost/api/v1/items
+KIND_NODE=argocd-postgres-control-plane docker compose \
+  --project-name kind-ingress-argocd-postgres -f kind/compose.yaml up -d
+
+KIND_NODE=argocd-postgres-control-plane docker compose \
+  --project-name kind-ingress-argocd-postgres -f kind/compose.yaml down
 ```
 
-Modern browsers resolve `.localhost` to your own machine. `/` returns 404 because
-the app has no root route. The gateway runs in the background with restart policy
-`unless-stopped`; Docker Desktop and the kind cluster must remain running.
-Hostname rules belong in each app's Ingress, allowing multiple apps to share the
-same gateway and controller on port 80.
-
-The setup script initially applies the Ingress directly. Once this Git repository
-is connected to the app's Argo CD Application, Argo CD manages the route from
-`myfastapiapp/kustomization.yaml`. The Application files in `argocd/` are
-bootstrapped separately; reapply them after changing their settings. Traefik's
-Application fetches its Helm chart from the public chart repository.
-
-To refresh or stop the gateway using this repository's configuration:
-
-```sh
-KIND_NODE=argocd-demo-control-plane docker compose \
-  --project-name kind-ingress-argocd-demo -f kind/compose.yaml up -d
-
-KIND_NODE=argocd-demo-control-plane docker compose \
-  --project-name kind-ingress-argocd-demo -f kind/compose.yaml down
-```
-
-## Open the Argo CD UI
-
-```sh
-kubectl --context kind-argocd-demo -n argocd \
-  port-forward service/argocd-server 8080:443
-```
-
-Keep that terminal running and open https://localhost:8080. This local connection
-is for the Argo CD UI; it is independent of the application's Ingress access.
+The setup script installs Traefik from chart `42.0.0`, starts this gateway, and
+applies the initial app Ingress. Docker Desktop and the cluster must stay running.
+The Ingress rules in Git select app Services by hostname, allowing more apps to
+share the same controller and gateway.
 
 ## Release an app change
 
-1. Build and load a new image tag from the app's own repository, for example
-   `./scripts/build-kind.sh v2` there.
-2. Update `image` in this repository's `myfastapiapp/deployment.yaml`.
-3. Commit and push the deployment change, then wait for automatic sync or sync in
-   Argo CD. Use new image tags for code changes.
+1. Build and publish a new image from the app repository, or build and load it
+   into `argocd-postgres` for local use. Keep the app version and lockfile in sync.
+2. Update `image` in `myfastapiapp/deployment.yaml` to that version.
+3. Commit and push this deployment repository, then wait for Argo CD to sync.
 
-Manifest-only changes, such as replica counts, resource requests, or the Ingress
-hostname, need only a deployment-repository commit. They do not require rebuilding
-the application image.
+Use a new image tag for each code release. Manifest-only edits, such as resource
+settings, replicas, and Ingress rules, need only a deployment-repository commit.
+See [image publishing and recovery](docs/postgres-kind.md#4-make-the-app-image-available)
+if a failed release skipped image publication.

@@ -29,5 +29,5 @@ jobs:
 
       - name: Validate Docker Compose configuration
         env:
-          KIND_NODE: argocd-demo-control-plane
+          KIND_NODE: argocd-postgres-control-plane
         run: docker compose -f kind/compose.yaml config --quiet
