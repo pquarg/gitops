@@ -17,7 +17,7 @@ spec:
       containers:
         - name: myfastapiapp-container
           # Published image in GHCR; independent of the container's name.
-          image: ghcr.io/pquarg/myfastapiapp:0.1.5
+          image: ghcr.io/pquarg/myfastapiapp:0.1.6
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
