@@ -3,3 +3,6 @@
 .env.*
 *.log
 /myfastapiapp/secrets.yaml
+/overlays/kind-postgres/app-secrets.yaml
+/overlays/kind-postgres/postgres-secrets.yaml
+/kind/postgres-config.local.yaml

@@ -4,6 +4,11 @@ An independent Git repository containing Kubernetes manifests and local platform
 configuration. Application code and Dockerfiles belong in separate application
 repositories.
 
+For Postgres in kind with data stored in a laptop directory, follow the
+[Postgres walkthrough](docs/postgres-kind.md). It uses a separate overlay and a
+second cluster, `argocd-postgres`, so the existing `argocd-demo` setup can keep
+running. The base manifests below do not provision a database.
+
 ```text
 .github/workflows/
   validate.yaml          # Configuration checks on GitHub-hosted runners
@@ -106,6 +111,9 @@ git check-ignore myfastapiapp/secrets.yaml
 
 The last command should print `myfastapiapp/secrets.yaml`. Edit that file in your
 editor and fill in `stringData.API_USERNAME` and `stringData.API_PASSWORD`.
+The base Deployment stays on `0.1.1`. The newer account-based application uses
+Postgres through `AUTH_DATABASE_URL`; its overlay has separate local Secret files
+as described in the [walkthrough](docs/postgres-kind.md#3-create-the-database-secrets).
 Keep the metadata name `myfastapiapp-secrets` and namespace `default` so they
 match the Deployment. Only the blank `secrets.example.yaml` belongs in Git.
 

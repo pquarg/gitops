@@ -1,0 +1,11 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    labels:
+      myfastapiapp.local/postgres-storage: "true"
+    extraMounts:
+      # Replace with an absolute laptop directory outside this Git repository.
+      # kind does not expand $HOME or ~ in YAML.
+      - hostPath: /absolute/path/to/myfastapiapp/postgres
+        containerPath: /mnt/myfastapiapp-postgres

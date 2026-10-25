@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: myfastapiapp-postgres-statefulset
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  serviceName: myfastapiapp-postgres-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myfastapiapp-postgres-pod
+  template:
+    metadata:
+      labels:
+        app: myfastapiapp-postgres-pod
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          image: postgres:17
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: myfastapiapp
+            - name: POSTGRES_USER
+              value: myfastapiapp
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: myfastapiapp-postgres-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          startupProbe:
+            exec:
+              command: [pg_isready, -h, "127.0.0.1", -U, myfastapiapp, -d, myfastapiapp]
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: [pg_isready, -h, "127.0.0.1", -U, myfastapiapp, -d, myfastapiapp]
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: [pg_isready, -h, "127.0.0.1", -U, myfastapiapp, -d, myfastapiapp]
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: myfastapiapp-postgres-pvc

@@ -23,7 +23,9 @@ jobs:
           bash -n scripts/setup-ingress-kind.sh
 
       - name: Render Kubernetes manifests
-        run: kubectl kustomize myfastapiapp > /dev/null
+        run: |
+          kubectl kustomize myfastapiapp > /dev/null
+          kubectl kustomize overlays/kind-postgres > /dev/null
 
       - name: Validate Docker Compose configuration
         env:
