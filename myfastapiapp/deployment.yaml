@@ -22,10 +22,12 @@ spec:
           ports:
             - name: http
               containerPort: 8000
-          envFrom:
-            - secretRef:
-                name: myfastapiapp-secrets
           env:
+            - name: AUTH_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: myfastapiapp-secrets
+                  key: AUTH_DATABASE_URL
             - name: APP_MESSAGE
               valueFrom:
                 configMapKeyRef:

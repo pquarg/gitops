@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: myfastapiapp-postgres-application
+  name: myfastapiapp
   namespace: argocd
 spec:
   project: default

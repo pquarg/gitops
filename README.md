@@ -2,6 +2,9 @@
 
 This repository runs FastAPI and Postgres in one kind cluster, `argocd-postgres`.
 The cluster contains one Argo CD installation and one shared Traefik controller.
+One Argo CD Application, `myfastapiapp`, manages FastAPI and its dedicated Postgres
+database together. FastAPI runs in a Pod managed by a Deployment; Postgres runs
+in a separate Pod managed by a StatefulSet with persistent storage.
 Postgres data lives in a laptop directory mounted into the kind node. Application
 code and Dockerfiles belong in the separate `../apps/myfastapiapp` repository.
 
@@ -14,18 +17,17 @@ kubectl, and Docker Compose are required.
 | kind cluster | `argocd-postgres` |
 | kubectl context | `kind-argocd-postgres` |
 | Application namespace | `default` |
-| FastAPI Argo CD Application | `myfastapiapp-postgres-application` |
+| FastAPI and Postgres Argo CD Application | `myfastapiapp` |
 | Argo CD source path | `overlays/kind-postgres` |
 | App URL | http://myfastapiapp.localhost/api/v1/docs/ |
 | Argo CD UI | https://localhost:8080 |
 
 ```text
 myfastapiapp/                 # App image, configuration, Service, and Ingress
-  deployment.yaml            # Current app version and resource settings
+  deployment.yaml            # App image, database Secret reference, and resource settings
   kustomization.yaml         # Base resources imported by the Postgres overlay
 overlays/kind-postgres/       # Complete app and database deployment
   kustomization.yaml
-  database-env.yaml          # Required AUTH_DATABASE_URL Secret reference
   app-secrets.example.yaml   # Blank app Secret template
   postgres-secrets.example.yaml
   postgres-storage.yaml      # Laptop-backed PV/PVC with retention
@@ -46,7 +48,7 @@ scripts/
 
 The deployment entry point is `overlays/kind-postgres`. Both helper scripts
 select `argocd-postgres` by default. The base directory is included by the overlay;
-register only `argocd/myfastapiapp.yaml` for the FastAPI application.
+register `argocd/myfastapiapp.yaml` to manage FastAPI and Postgres together.
 
 ## Open the app and Argo CD
 
@@ -96,8 +98,9 @@ port-forward and the app's HTTP gateway are independent connections.
 ## App configuration and credentials
 
 `myfastapiapp/configmap.yaml` supplies `APP_MESSAGE`. The app's image and memory
-settings live in `myfastapiapp/deployment.yaml`. The overlay adds Postgres and
-requires `AUTH_DATABASE_URL` from the `myfastapiapp-secrets` Secret.
+settings live in `myfastapiapp/deployment.yaml`. The Deployment reads
+`AUTH_DATABASE_URL` from the `myfastapiapp-secrets` Secret. The overlay adds its
+dedicated Postgres database and persistent storage.
 
 Provision these local files separately from Argo CD:
 
@@ -108,7 +111,7 @@ Provision these local files separately from Argo CD:
 
 Follow [Create the database secrets](docs/postgres-kind.md#3-create-the-database-secrets)
 for the templates and matching password. Keep filled files at mode `600` and out
-of Kustomize and Git. The app no longer uses `API_USERNAME` or `API_PASSWORD`.
+of Kustomize and Git.
 
 Apply an edited local Secret with:
 
@@ -221,16 +224,18 @@ repositories: a Kubernetes Secret's base64 encoding is reversible. See
 
 The repository is [pquarg/deploy](https://github.com/pquarg/deploy). The Application
 in `argocd/myfastapiapp.yaml` uses `git@github.com:pquarg/deploy.git`, follows
-`HEAD`, and renders `overlays/kind-postgres`. Its name remains
-`myfastapiapp-postgres-application` so the existing Application keeps ownership
-of the same resources.
+`HEAD`, and renders `overlays/kind-postgres`. The Application is named
+`myfastapiapp` and provides one place to review, sync, and check the health of
+both FastAPI and Postgres.
 
 After committing and pushing the deployment files, connect the private repository
 under Argo CD **Settings -> Repositories**. Its Git credential is separate from
 the app image's `registry-credentials` Secret. See
 [Argo CD repository access](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/).
 
-Register the app once its Secrets and image are available:
+On an existing cluster with `myfastapiapp-postgres-application`, follow
+[Rename the existing Application](#rename-the-existing-application) first.
+For a fresh cluster, register the app once its Secrets and image are available:
 
 ```sh
 kubectl --context kind-argocd-postgres apply -f argocd/myfastapiapp.yaml
@@ -241,6 +246,23 @@ Automatic sync applies committed changes; `selfHeal: true` restores managed
 resources that drift from Git. The `traefik` Application manages the shared
 controller separately. On a fresh cluster, follow the
 [installation steps](docs/postgres-kind.md#7-install-argo-cd-and-expose-the-app).
+
+### Rename the existing Application
+
+Changing `metadata.name` creates a new Application registration. If your cluster
+still uses `myfastapiapp-postgres-application`, replace that registration before
+applying `argocd/myfastapiapp.yaml`:
+
+1. Commit and push these manifests, then let any active sync finish.
+2. In the Argo CD UI, delete `myfastapiapp-postgres-application` with
+   **Non-Cascading (Orphan)**. This preserves the running workloads and storage.
+   See [Argo CD non-cascading deletion](https://argo-cd.readthedocs.io/en/stable/user-guide/app_deletion/#3-non-cascading-orphan).
+3. Apply `argocd/myfastapiapp.yaml` using the command above. Let `myfastapiapp`
+   sync and adopt the existing FastAPI and Postgres resources.
+
+The UI should then show `myfastapiapp` for the product and `traefik` for the shared
+Ingress controller. The Deployment, StatefulSet, Services, PV, and PVC keep their
+existing names.
 
 ## Manual deployment and validation
 
@@ -287,5 +309,8 @@ share the same controller and gateway.
 
 Use a new image tag for each code release. Manifest-only edits, such as resource
 settings, replicas, and Ingress rules, need only a deployment-repository commit.
-See [image publishing and recovery](docs/postgres-kind.md#4-make-the-app-image-available)
+FastAPI keeps its app release version; PostgreSQL has its own image version in
+`overlays/kind-postgres/postgres-statefulset.yaml`. Both are deployed through the
+same Application.
+See [image publishing](docs/postgres-kind.md#4-make-the-app-image-available)
 if a failed release skipped image publication.

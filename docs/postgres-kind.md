@@ -2,6 +2,8 @@
 
 Run commands from the `deploy` repository root. This walkthrough uses one kind
 cluster, `argocd-postgres`, containing FastAPI, Postgres, Argo CD, and Traefik.
+One Argo CD Application, `myfastapiapp`, manages FastAPI and Postgres together;
+the Deployment and StatefulSet run them in separate Pods.
 The app is available at `myfastapiapp.localhost` and Argo CD at `localhost:8080`.
 For an already configured cluster, skip creation and installation steps; use Git
 and Argo CD sync for routine changes.
@@ -13,7 +15,7 @@ named Docker volume; they are not copied by these manifests.
 
 `AUTH_DATABASE_URL` is still an environment variable inside FastAPI. A Kubernetes
 Secret supplies its value without embedding the password in the tracked Deployment
-or ConfigMap. For example, the overlay adds this to the Deployment:
+or ConfigMap. The Deployment reads the required Secret key explicitly:
 
 ```yaml
 env:
@@ -58,9 +60,8 @@ laptop folder. See [local volumes](https://kubernetes.io/docs/concepts/storage/v
 | `overlays/kind-postgres/postgres-storage.yaml` | Fixed PV and PVC; `Retain` policy |
 | `overlays/kind-postgres/postgres-service.yaml` | Internal database DNS name and port |
 | `overlays/kind-postgres/postgres-statefulset.yaml` | Postgres 17, probes, and data mount |
-| `overlays/kind-postgres/database-env.yaml` | Required app database environment variable |
 | `overlays/kind-postgres/kustomization.yaml` | Combines the base app and database |
-| `myfastapiapp/deployment.yaml` | App image `0.1.5`, probes, and resource settings |
+| `myfastapiapp/deployment.yaml` | App image, database Secret reference, probes, and resource settings |
 | `argocd/myfastapiapp.yaml` | Argo CD Application targeting the overlay |
 
 ## 1. Choose the laptop directory
@@ -70,11 +71,11 @@ mkdir -p "$HOME/.local/share/myfastapiapp/postgres"
 cp -n kind/postgres-config.example.yaml kind/postgres-config.local.yaml
 ```
 
-Edit `kind/postgres-config.local.yaml`. Replace `hostPath` with the absolute path
-to that directory; on this laptop that is:
+Edit `kind/postgres-config.local.yaml`. Set `hostPath` to the absolute path of the
+directory created above. Print that path with:
 
-```yaml
-hostPath: /Users/admin/.local/share/myfastapiapp/postgres
+```sh
+printf '%s/.local/share/myfastapiapp/postgres\n' "$HOME"
 ```
 
 Leave `containerPath` and the node label as supplied. kind does not expand `$HOME`
@@ -113,9 +114,8 @@ Choose one password and enter it in both local files in your editor:
 - `app-secrets.yaml`: set `stringData.AUTH_DATABASE_URL` to
   `postgresql://myfastapiapp:YOUR_PASSWORD@myfastapiapp-postgres-service:5432/myfastapiapp`.
 
-These are the app and database Secret files for the single cluster. The app
-does not use the legacy `API_USERNAME` and `API_PASSWORD` keys. The `cp -n`
-commands preserve existing files.
+These are the app and database Secret files for the single cluster. The `cp -n`
+commands preserve existing local files.
 
 A password manager can generate a hex password, or you can run
 `openssl rand -hex 24`. Hex avoids URL escaping issues. If you use special
@@ -147,12 +147,10 @@ project version. Commit the refreshed lockfile with the app release. If you choo
 a different app version, update `image` in `myfastapiapp/deployment.yaml` and
 the build/load commands below to match it.
 
-The Deployment selects `ghcr.io/pquarg/myfastapiapp:0.1.5`. Ensure that version has been
-published: a successful checks job can still have a skipped image job. If a version
-bump failed CI and a later lockfile fix passed, use the app repository's **CI ->
-Run workflow** action on `main` to retry publishing that version after all checks
-pass. Commit and push the app repository's CI recovery change before running this
-command; manual publication is restricted to `main`.
+The Deployment selects `ghcr.io/pquarg/myfastapiapp:0.1.5`. Confirm that version
+has been published; a successful checks job can still have a skipped image job.
+If image publication was skipped, rerun the app repository's **CI -> Run workflow**
+action on `main` after all checks pass. Manual publication is restricted to `main`.
 From the command line:
 
 ```sh
@@ -238,12 +236,15 @@ data is stored outside the replaced Pod.
 Commit and push the manifests, example files, scripts, and documentation. Review
 staged changes; filled Secret files and the local kind configuration stay ignored.
 There is one app registration, `argocd/myfastapiapp.yaml`, targeting the complete
-`overlays/kind-postgres` deployment.
+`overlays/kind-postgres` deployment. If the cluster still uses the old Application
+name `myfastapiapp-postgres-application`, follow
+[Rename the existing Application](../README.md#rename-the-existing-application)
+before registering the new name.
 
 ```sh
 git add -A
 git diff --cached
-git commit -m "Consolidate local deployment onto one kind cluster"
+git commit -m "Manage FastAPI and Postgres in one Argo CD Application"
 git push
 ```
 
@@ -273,14 +274,14 @@ Register the app, then set up the shared controller and gateway:
 kubectl --context kind-argocd-postgres apply -f argocd/myfastapiapp.yaml
 kubectl --context kind-argocd-postgres -n argocd wait \
   --for=jsonpath='{.status.sync.status}'=Synced \
-  application/myfastapiapp-postgres-application --timeout=300s
+  application/myfastapiapp --timeout=300s
 ./scripts/setup-ingress-kind.sh
 kubectl --context kind-argocd-postgres -n argocd get applications
 ```
 
-The app Application retains the name `myfastapiapp-postgres-application`. It
-manages FastAPI and Postgres together. Argo CD applies storage first, waits for
-Postgres to become healthy, then applies the app. The Secrets must already exist.
+The `myfastapiapp` Application manages FastAPI and Postgres together.
+Argo CD applies storage first, waits for Postgres to become healthy, then applies
+the app. The Secrets must already exist.
 The separate `traefik` Application manages the shared Ingress controller.
 
 Open http://myfastapiapp.localhost/api/v1/docs/ or verify:
