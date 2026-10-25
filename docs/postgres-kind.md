@@ -143,12 +143,18 @@ uv lock --project ../apps/myfastapiapp
 ```
 
 Docker uses `uv sync --locked`, which fails if the lockfile still records an older
-project version. Commit the refreshed lockfile with the app release. If you choose
-a different app version, update `image` in `myfastapiapp/deployment.yaml` and
-the build/load commands below to match it.
+project version. Commit the refreshed lockfile with the app release. Update
+`image` in `myfastapiapp/deployment.yaml` to the version you want to deploy.
+Keep that image pinned to a specific version; it is the source of truth for
+the commands below. Read the full image reference from the manifest:
 
-The Deployment selects `ghcr.io/pquarg/myfastapiapp:0.1.5`. Confirm that version
-has been published; a successful checks job can still have a skipped image job.
+```sh
+APP_IMAGE="$(awk '$1 == "image:" { print $2; exit }' myfastapiapp/deployment.yaml)"
+printf 'App image: %s\n' "$APP_IMAGE"
+```
+
+Confirm that image has been published; a successful checks job can still have a
+skipped image job.
 If image publication was skipped, rerun the app repository's **CI -> Run workflow**
 action on `main` after all checks pass. Manual publication is restricted to `main`.
 From the command line:
@@ -162,12 +168,14 @@ Confirm the **Build image and publish version changes** job succeeds before
 relying on the registry. For a private image, provision `registry-credentials` in
 the cluster using the [registry authentication instructions](../README.md#registry-authentication).
 
-For a local image build instead, the following uses the adjacent app repository
-and loads the exact image name selected by the Deployment:
+For a local image build instead, run the following in the same shell so
+`APP_IMAGE` is still set. This uses the adjacent app repository and loads the
+exact image name selected by the Deployment. Its app version should match the
+version selected above:
 
 ```sh
-docker build --provenance=false -t ghcr.io/pquarg/myfastapiapp:0.1.5 ../apps/myfastapiapp
-kind load docker-image ghcr.io/pquarg/myfastapiapp:0.1.5 --name argocd-postgres
+docker build --provenance=false -t "$APP_IMAGE" ../apps/myfastapiapp
+kind load docker-image "$APP_IMAGE" --name argocd-postgres
 ```
 
 The local build uses a single platform without provenance attestations for
