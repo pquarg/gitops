@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: myfastapiapp-deployment
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   replicas: 1
   selector:
@@ -17,7 +19,7 @@ spec:
       containers:
         - name: myfastapiapp-container
           # Published image in GHCR; independent of the container's name.
-          image: ghcr.io/pquarg/myfastapiapp:0.1.6
+          image: ghcr.io/pquarg/myfastapiapp:0.1.8
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

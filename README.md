@@ -33,6 +33,7 @@ overlays/kind-postgres/       # Complete app and database deployment
   postgres-storage.yaml      # Laptop-backed PV/PVC with retention
   postgres-statefulset.yaml
   postgres-service.yaml
+  migration-job.yaml         # Alembic release step before new app Pods
 argocd/
   myfastapiapp.yaml           # Registers the app and Postgres overlay
   traefik.yaml                # Registers the shared Ingress controller
@@ -42,11 +43,12 @@ kind/
   compose.yaml               # Gateway on localhost port 80
   haproxy.cfg
 scripts/
+  backup-postgres.sh         # Database backup and archive read check
   deploy-kind.sh             # Manual bootstrap of the complete overlay
   setup-ingress-kind.sh      # Traefik and the app gateway
 ```
 
-The deployment entry point is `overlays/kind-postgres`. Both helper scripts
+The deployment entry point is `overlays/kind-postgres`. The helper scripts
 select `argocd-postgres` by default. The base directory is included by the overlay;
 register `argocd/myfastapiapp.yaml` to manage FastAPI and Postgres together.
 
@@ -304,8 +306,10 @@ share the same controller and gateway.
 
 1. Build and publish a new image from the app repository, or build and load it
    into `argocd-postgres` for local use. Keep the app version and lockfile in sync.
-2. Update `image` in `myfastapiapp/deployment.yaml` to that version.
-3. Commit and push this deployment repository, then wait for Argo CD to sync.
+2. Update `image` in `myfastapiapp/deployment.yaml` and
+   `overlays/kind-postgres/migration-job.yaml` to the same version.
+3. For a database change, follow the backup and controlled sync steps below
+   before pushing. For other changes, commit and push, then wait for Argo CD to sync.
 
 Use a new image tag for each code release. Manifest-only edits, such as resource
 settings, replicas, and Ingress rules, need only a deployment-repository commit.
@@ -314,3 +318,76 @@ FastAPI keeps its app release version; PostgreSQL has its own image version in
 same Application.
 See [image publishing](docs/postgres-kind.md#4-make-the-app-image-available)
 if a failed release skipped image publication.
+
+### Back up and release a database change
+
+1. Disable auto-sync in the live Application's Argo CD **App Details** and let
+   any active sync finish. The Application may still be named
+   `myfastapiapp-postgres-application` on an older setup. Use its existing name
+   for this release; follow the separate rename instructions later. Editing
+   `argocd/myfastapiapp.yaml` alone does not change the live policy. Reapplying
+   its current configuration enables auto-sync again.
+2. During a quiet window, run the backup script and continue only if it succeeds:
+
+   ```sh
+   ./scripts/backup-postgres.sh
+   ```
+
+   The script explicitly targets context `kind-argocd-postgres`, namespace
+   `default`, and database `myfastapiapp`. It uses `pg_dump` and `pg_restore`
+   inside the existing Postgres Pod, so local PostgreSQL tools are unnecessary.
+   It writes a custom-format archive under
+   `$HOME/.local/share/myfastapiapp/backups` with mode `600`, outside Git. It
+   removes incomplete files if the dump or archive read check fails. The read
+   check renders the full archive to `/dev/null` without connecting to a
+   database; it does not test an actual restore. Verify recovery by restoring
+   into a disposable database before relying on a backup. Keep writes paused
+   through verification if recovery must preserve every write since the backup.
+   See [pg_dump](https://www.postgresql.org/docs/17/app-pgdump.html) and
+   [pg_restore](https://www.postgresql.org/docs/17/app-pgrestore.html).
+
+   To select another kind cluster or destination:
+
+   ```sh
+   ./scripts/backup-postgres.sh argocd-postgres /absolute/path/outside-the-repo/backups
+   ```
+
+3. Validate the overlay, review the diff, then commit and push the image and
+   migration changes together. Include the new `migration-job.yaml` file:
+
+   ```sh
+   kubectl kustomize overlays/kind-postgres > /dev/null
+   kubectl --context kind-argocd-postgres -n default \
+     apply --dry-run=server -k overlays/kind-postgres
+   git diff --check
+   ```
+
+4. Refresh Argo CD and run a full Application sync, with Force and Replace off.
+   Resource-selective sync skips hooks. Sync waves apply storage at `-2`, wait
+   for Postgres at `-1`, run the migration Job at `0`, and roll out FastAPI at `1`.
+   The Job uses the app's database Secret and the new app image to run
+   `python -m alembic upgrade head`. A failed migration blocks the app rollout.
+   The latest Job and logs remain until the next sync replaces them. Hooks may
+   run again on later syncs; Alembic skips already applied revisions.
+   See [Argo CD sync phases and waves](https://argo-cd.readthedocs.io/en/latest/user-guide/sync-waves/).
+5. Check the Job logs, revision, rollout, and health:
+
+   ```sh
+   kubectl --context kind-argocd-postgres -n default logs job/myfastapiapp-migrate
+   kubectl --context kind-argocd-postgres -n default \
+     exec myfastapiapp-postgres-statefulset-0 -c postgres -- \
+     psql -U myfastapiapp -d myfastapiapp \
+     -c 'SELECT version_num FROM alembic_version;'
+   kubectl --context kind-argocd-postgres -n default \
+     rollout status deployment/myfastapiapp-deployment --timeout=180s
+   curl -fsS http://myfastapiapp.localhost/health
+   ```
+
+   For v0.1.8, expect revision `002_account_email`. Confirm Argo CD shows
+   **Synced / Healthy**, test existing login and registration with email, then
+   re-enable auto-sync in the UI.
+
+If migration fails, inspect the Job logs before retrying. If migration succeeds
+but the app rollout fails, the database has already changed. Check schema
+compatibility before reverting the app image. Git rollback does not undo
+migrations; the v0.1.8 email downgrade deletes the email column and its data.
