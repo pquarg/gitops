@@ -6,4 +6,4 @@ resources:
 images:
   # Sets the release image for both the API Deployment and migration Job.
   - name: ghcr.io/pquarg/myfastapiapp
-    newTag: "0.1.8"
+    newTag: "0.1.10"
