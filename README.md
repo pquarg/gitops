@@ -387,19 +387,23 @@ if a failed release skipped image publication.
    ```sh
    kubectl --context kind-argocd-postgres -n default logs job/myfastapiapp-migrate
    kubectl --context kind-argocd-postgres -n default \
-     exec myfastapiapp-postgres-statefulset-0 -c postgres -- \
-     psql -U myfastapiapp -d myfastapiapp \
-     -c 'SELECT version_num FROM alembic_version;'
-   kubectl --context kind-argocd-postgres -n default \
      rollout status deployment/myfastapiapp-deployment --timeout=180s
+   kubectl --context kind-argocd-postgres -n default \
+     exec deployment/myfastapiapp-deployment -- \
+     python -m alembic current --check-heads
    curl -fsS http://myfastapiapp.localhost/health
+   curl -fsS http://myfastapiapp.localhost/ready
    ```
 
-   For v0.1.8, expect revision `002_account_email`. Confirm Argo CD shows
-   **Synced / Healthy**, test existing login and registration with email, then
+   `current --check-heads` checks the database against the revisions bundled in
+   the running release image and fails if any head is unapplied. Confirm Argo CD
+   shows **Synced / Healthy**, test existing login and registration, then
    re-enable auto-sync in the UI.
 
 If migration fails, inspect the Job logs before retrying. If migration succeeds
 but the app rollout fails, the database has already changed. Check schema
 compatibility before reverting the app image. Git rollback does not undo
-migrations; the v0.1.8 email downgrade deletes the email column and its data.
+migrations. Review each revision's downgrade operations for possible data loss.
+
+The [development database reset runbook](docs/database-reset.md) records the
+historical baseline replacement and its separate reset procedure.
