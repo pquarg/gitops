@@ -117,9 +117,11 @@ port-forward and the app's HTTP gateway are independent connections.
 
 `apps/myfastapiapp/base/configmap.yaml` supplies `APP_MESSAGE`. The staging image
 version is `images[].newTag` in `apps/myfastapiapp/kustomization.yaml`;
-Kustomize applies it to both the API Deployment and migration Job. Memory settings
-live in `apps/myfastapiapp/base/deployment.yaml`. The Deployment reads
-`AUTH_DATABASE_URL` from the `myfastapiapp-secrets` Secret. The overlay adds its
+Kustomize applies it to both the API Deployment and migration Job. The base
+manifests reference the image without a tag; the consuming overlay selects the
+release. Deploy through `apps/myfastapiapp` so that selection is applied.
+Memory settings live in `apps/myfastapiapp/base/deployment.yaml`. The Deployment
+reads `AUTH_DATABASE_URL` from the `myfastapiapp-secrets` Secret. The overlay adds its
 dedicated Postgres database and persistent storage.
 
 Provision these local files separately from Argo CD:
@@ -318,7 +320,8 @@ share the same controller and gateway.
    into `argocd-postgres` for local use. Keep the app version and lockfile in sync.
 2. Update `images[].newTag` in
    `apps/myfastapiapp/kustomization.yaml`. This selects the same
-   release for the API and migration Job; leave the base image defaults alone.
+   release for the API and migration Job. This is the only deployment image
+   version to edit; the base manifests contain no release tags.
 3. For a database change, follow the backup and controlled sync steps below
    before pushing. For other changes, commit and push, then wait for Argo CD to sync.
 

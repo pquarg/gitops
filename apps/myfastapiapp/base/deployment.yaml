@@ -18,8 +18,8 @@ spec:
         - name: registry-credentials
       containers:
         - name: myfastapiapp-container
-          # Published image in GHCR; independent of the container's name.
-          image: ghcr.io/pquarg/myfastapiapp:0.1.11
+          # The consuming Kustomize overlay supplies the release tag.
+          image: ghcr.io/pquarg/myfastapiapp
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

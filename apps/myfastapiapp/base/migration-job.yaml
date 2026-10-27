@@ -16,7 +16,8 @@ spec:
         - name: registry-credentials
       containers:
         - name: migrate
-          image: ghcr.io/pquarg/myfastapiapp:0.1.8
+          # The consuming Kustomize overlay supplies the release tag.
+          image: ghcr.io/pquarg/myfastapiapp
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "alembic", "upgrade", "head"]
           env:
