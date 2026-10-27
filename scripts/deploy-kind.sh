@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   printf 'Usage: %s [cluster]\n' "${0##*/}"
-  printf 'Default: cluster=argocd-postgres; namespace=default; manifests=apps/myfastapiapp/overlays/staging\n'
+  printf 'Default: cluster=argocd-postgres; namespace=default; manifests=apps/myfastapiapp\n'
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -20,7 +20,7 @@ fi
 cluster="${1:-argocd-postgres}"
 context="kind-${cluster}"
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-overlay="$project_root/apps/myfastapiapp/overlays/staging"
+overlay="$project_root/apps/myfastapiapp"
 kube=(kubectl "--context=$context" --namespace=default)
 
 umask 077

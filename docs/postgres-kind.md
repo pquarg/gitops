@@ -58,10 +58,11 @@ laptop folder. See [local volumes](https://kubernetes.io/docs/concepts/storage/v
 | File | Purpose |
 | --- | --- |
 | `kind/postgres-config.example.yaml` | Laptop directory mount and storage node label |
-| `apps/myfastapiapp/overlays/staging/postgres-storage.yaml` | Fixed PV and PVC; `Retain` policy |
-| `apps/myfastapiapp/overlays/staging/postgres-service.yaml` | Internal database DNS name and port |
-| `apps/myfastapiapp/overlays/staging/postgres-statefulset.yaml` | Postgres 17, probes, and data mount |
-| `apps/myfastapiapp/overlays/staging/kustomization.yaml` | Combines the app and database; selects the API and Job image version |
+| `apps/myfastapiapp/overlays/postgres/postgres-storage.yaml` | Fixed PV and PVC; `Retain` policy |
+| `apps/myfastapiapp/overlays/postgres/postgres-service.yaml` | Internal database DNS name and port |
+| `apps/myfastapiapp/overlays/postgres/postgres-statefulset.yaml` | Postgres 17, probes, and data mount |
+| `apps/myfastapiapp/overlays/postgres/kustomization.yaml` | Groups the Postgres storage, Service, and StatefulSet |
+| `apps/myfastapiapp/kustomization.yaml` | Combines the app and database; selects the API and Job image version |
 | `apps/myfastapiapp/base/deployment.yaml` | API database Secret reference, probes, and resource settings |
 | `apps/myfastapiapp/base/migration-job.yaml` | Alembic migration command and database Secret reference |
 | `argocd/myfastapiapp.yaml` | Argo CD Application targeting the overlay |
@@ -100,14 +101,14 @@ See [kind extra mounts](https://kind.sigs.k8s.io/docs/user/configuration/#extra-
 ## 3. Create the database secrets
 
 ```sh
-cp -n apps/myfastapiapp/overlays/staging/app-secrets.example.yaml \
-  apps/myfastapiapp/overlays/staging/app-secrets.yaml
-cp -n apps/myfastapiapp/overlays/staging/postgres-secrets.example.yaml \
-  apps/myfastapiapp/overlays/staging/postgres-secrets.yaml
-chmod 600 apps/myfastapiapp/overlays/staging/app-secrets.yaml \
-  apps/myfastapiapp/overlays/staging/postgres-secrets.yaml
-git check-ignore apps/myfastapiapp/overlays/staging/app-secrets.yaml \
-  apps/myfastapiapp/overlays/staging/postgres-secrets.yaml
+cp -n apps/myfastapiapp/app-secrets.example.yaml \
+  apps/myfastapiapp/app-secrets.yaml
+cp -n apps/myfastapiapp/overlays/postgres/postgres-secrets.example.yaml \
+  apps/myfastapiapp/overlays/postgres/postgres-secrets.yaml
+chmod 600 apps/myfastapiapp/app-secrets.yaml \
+  apps/myfastapiapp/overlays/postgres/postgres-secrets.yaml
+git check-ignore apps/myfastapiapp/app-secrets.yaml \
+  apps/myfastapiapp/overlays/postgres/postgres-secrets.yaml
 ```
 
 Choose one password and enter it in both local files in your editor:
@@ -128,8 +129,8 @@ Apply both files to the cluster:
 
 ```sh
 kubectl --context kind-argocd-postgres -n default apply \
-  -f apps/myfastapiapp/overlays/staging/app-secrets.yaml \
-  -f apps/myfastapiapp/overlays/staging/postgres-secrets.yaml
+  -f apps/myfastapiapp/app-secrets.yaml \
+  -f apps/myfastapiapp/overlays/postgres/postgres-secrets.yaml
 ```
 
 These files are excluded from Kustomize and Git. Argo CD manages references to the
@@ -146,13 +147,13 @@ uv lock --project ../apps/myfastapiapp
 
 Docker uses `uv sync --locked`, which fails if the lockfile still records an older
 project version. Commit the refreshed lockfile with the app release. Update
-`images[].newTag` in `apps/myfastapiapp/overlays/staging/kustomization.yaml` to the
+`images[].newTag` in `apps/myfastapiapp/kustomization.yaml` to the
 version you want to deploy. It sets the same image for the API and migration Job.
 Keep that image pinned to a specific version. Read the resolved image from the
 rendered staging overlay:
 
 ```sh
-APP_IMAGE="$(kubectl kustomize apps/myfastapiapp/overlays/staging |
+APP_IMAGE="$(kubectl kustomize apps/myfastapiapp |
   awk '$1 == "image:" && $2 ~ /myfastapiapp:/ { image = $2 } END { print image }')"
 printf 'App image: %s\n' "$APP_IMAGE"
 ```
@@ -193,9 +194,9 @@ previously loaded or downloaded image with the same tag.
 Before registering this app with Argo CD, do one manual deployment:
 
 ```sh
-kubectl kustomize apps/myfastapiapp/overlays/staging
+kubectl kustomize apps/myfastapiapp
 kubectl --context kind-argocd-postgres -n default apply --dry-run=server \
-  -k apps/myfastapiapp/overlays/staging
+  -k apps/myfastapiapp
 ./scripts/deploy-kind.sh
 kubectl --context kind-argocd-postgres -n default get pv,pvc,pods
 ```
@@ -244,7 +245,7 @@ data is stored outside the replaced Pod.
 Commit and push the manifests, example files, scripts, and documentation. Review
 staged changes; filled Secret files and the local kind configuration stay ignored.
 There is one app registration, `argocd/myfastapiapp.yaml`, targeting the complete
-`apps/myfastapiapp/overlays/staging` deployment. The registration retains the live
+`apps/myfastapiapp` deployment. The registration retains the live
 name `myfastapiapp-postgres-application`. For an existing cluster, follow
 [Publish manifests and connect Argo CD](../README.md#publish-manifests-and-connect-argo-cd).
 

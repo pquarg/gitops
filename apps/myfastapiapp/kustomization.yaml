@@ -1,10 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ../../base
-  - postgres-storage.yaml
-  - postgres-service.yaml
-  - postgres-statefulset.yaml
+  - ./base
+  - ./overlays/postgres
 images:
   # Sets the release image for both the API Deployment and migration Job.
   - name: ghcr.io/pquarg/myfastapiapp

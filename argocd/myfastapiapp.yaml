@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: git@github.com:pquarg/deploy.git
     targetRevision: main
-    path: apps/myfastapiapp/overlays/staging
+    path: apps/myfastapiapp
   destination:
     server: https://kubernetes.default.svc
     namespace: default
