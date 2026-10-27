@@ -46,8 +46,6 @@ apps/myfastapiapp/
     postgres-storage.yaml    # Laptop-backed PV/PVC with retention
     postgres-statefulset.yaml
     postgres-service.yaml
-overlays/kind-postgres/
-  kustomization.yaml         # Compatibility entry point for the old Argo source path
 argocd/
   myfastapiapp.yaml           # Registers the existing Application at the staging path
   traefik.yaml                # Registers the shared Ingress controller
@@ -65,8 +63,6 @@ scripts/
 The deployment entry point is `apps/myfastapiapp/overlays/staging`. The helper scripts
 select `argocd-postgres` by default. The base directory is included by the overlay;
 register `argocd/myfastapiapp.yaml` to manage FastAPI and Postgres together.
-For the running cluster, follow [Adopt the staging source path](#adopt-the-staging-source-path)
-after committing and pushing this reorganization.
 
 ## Open the app and Argo CD
 
@@ -253,9 +249,8 @@ under Argo CD **Settings -> Repositories**. Its Git credential is separate from
 the app image's `registry-credentials` Secret. See
 [Argo CD repository access](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/).
 
-On the existing cluster, follow
-[Adopt the staging source path](#adopt-the-staging-source-path) first.
-For a fresh cluster, register the app once its Secrets and image are available:
+Once the Secrets and image are available and these manifests are pushed, create
+or update the staging Application registration:
 
 ```sh
 kubectl --context kind-argocd-postgres apply -f argocd/myfastapiapp.yaml
@@ -267,32 +262,12 @@ resources that drift from Git. The `traefik` Application manages the shared
 controller separately. On a fresh cluster, follow the
 [installation steps](docs/postgres-kind.md#7-install-argo-cd-and-expose-the-app).
 
-### Adopt the staging source path
-
 The Application's source path is a live setting. Pushing changes to its YAML file
 does not update that registration because the Application does not manage its
-own `argocd/` directory.
-
-1. Commit and push this repository. The old `overlays/kind-postgres` path remains
-   a compatibility entry point importing the staging overlay, so Argo can still
-   render the same resources during the transition.
-2. Update the existing registration:
-
-   ```sh
-   kubectl --context kind-argocd-postgres apply -f argocd/myfastapiapp.yaml
-   ```
-
-   This sets the source path and keeps the current Application name and resource
-   ownership. It also enables automatic sync as declared in the file. If you are
-   deliberately keeping auto-sync disabled, edit only **App Details -> Source ->
-   Path** in the UI to `apps/myfastapiapp/overlays/staging` instead.
-3. Refresh Argo CD and confirm **Synced / Healthy**. The rendered workload and
-   storage identities are unchanged. The compatibility entry point can be removed
-   in a later commit after all registrations use the staging path.
-
-The app registration remains `myfastapiapp-postgres-application`; `traefik` manages
-the shared Ingress controller. This reorganization does not rename the Kubernetes
-workloads, namespace, Secrets, PV/PVC, kind cluster, host directory, or Git repository.
+own `argocd/` directory. Apply the registration after pushing a source-path change,
+then refresh Argo CD and confirm **Synced / Healthy**. Applying the file also enables
+automatic sync as declared in it. To keep auto-sync disabled while changing the
+source path, edit only **App Details -> Source -> Path** in the UI instead.
 
 ## Manual deployment and validation
 

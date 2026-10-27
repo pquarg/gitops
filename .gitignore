@@ -2,9 +2,6 @@
 .env
 .env.*
 *.log
-/myfastapiapp/secrets.yaml
-/overlays/kind-postgres/app-secrets.yaml
-/overlays/kind-postgres/postgres-secrets.yaml
 /apps/myfastapiapp/overlays/staging/app-secrets.yaml
 /apps/myfastapiapp/overlays/staging/postgres-secrets.yaml
 /apps/myfastapiapp/overlays/staging/secrets.yaml

@@ -246,7 +246,7 @@ staged changes; filled Secret files and the local kind configuration stay ignore
 There is one app registration, `argocd/myfastapiapp.yaml`, targeting the complete
 `apps/myfastapiapp/overlays/staging` deployment. The registration retains the live
 name `myfastapiapp-postgres-application`. For an existing cluster, follow
-[Adopt the staging source path](../README.md#adopt-the-staging-source-path).
+[Publish manifests and connect Argo CD](../README.md#publish-manifests-and-connect-argo-cd).
 
 ```sh
 git add -A
