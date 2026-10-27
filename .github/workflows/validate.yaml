@@ -25,7 +25,8 @@ jobs:
 
       - name: Render Kubernetes manifests
         run: |
-          kubectl kustomize myfastapiapp > /dev/null
+          kubectl kustomize apps/myfastapiapp/base > /dev/null
+          kubectl kustomize apps/myfastapiapp/overlays/staging > /dev/null
           kubectl kustomize overlays/kind-postgres > /dev/null
 
       - name: Validate Docker Compose configuration

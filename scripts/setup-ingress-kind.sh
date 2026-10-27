@@ -42,7 +42,7 @@ KIND_NODE="$node" docker compose --project-name "kind-ingress-${cluster}" \
   -f "$project_root/kind/compose.yaml" up -d
 
 printf 'Applying the app Ingress for the initial local setup\n'
-kubectl --context="$context" --namespace=default apply -f "$project_root/myfastapiapp/ingress.yaml"
+kubectl --context="$context" --namespace=default apply -f "$project_root/apps/myfastapiapp/base/ingress.yaml"
 kubectl --context="$context" --namespace=default wait \
   --for=jsonpath='{.status.loadBalancer.ingress[0].ip}'=127.0.0.1 \
   ingress/myfastapiapp-ingress --timeout=60s

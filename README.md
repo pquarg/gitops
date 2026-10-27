@@ -1,41 +1,55 @@
-# Local Kubernetes deployment
+# Staging deployment
 
-This repository runs FastAPI and Postgres in one kind cluster, `argocd-postgres`.
+This is the staging deployment repository for `myfastapiapp`. Staging currently
+runs FastAPI and Postgres in the existing kind cluster, `argocd-postgres`.
 The cluster contains one Argo CD installation and one shared Traefik controller.
-One Argo CD Application, `myfastapiapp`, manages FastAPI and its dedicated Postgres
-database together. FastAPI runs in a Pod managed by a Deployment; Postgres runs
-in a separate Pod managed by a StatefulSet with persistent storage.
+One Argo CD Application, `myfastapiapp-postgres-application`, manages FastAPI and
+its dedicated Postgres database together. Its existing name is retained to
+preserve resource ownership. FastAPI runs in a Pod managed by a Deployment;
+Postgres runs in a separate Pod managed by a StatefulSet with persistent storage.
 Postgres data lives in a laptop directory mounted into the kind node. Application
 code and Dockerfiles belong in the separate `../apps/myfastapiapp` repository.
 
 For a fresh setup or cluster rebuild, follow the [Postgres walkthrough](docs/postgres-kind.md).
 Commands here run from this deployment repository's root. Docker Desktop, kind,
-kubectl, and Docker Compose are required.
+kubectl, Docker Compose, and Python 3 are required.
+
+The reusable app base lives under `apps/myfastapiapp/base`. The staging overlay
+selects the release version and adds this environment's database and storage.
+A future production repository can import the base at a pinned Git commit and
+supply its own overlay. The staging overlay and laptop storage belong to staging.
 
 | Setting | Value |
 | --- | --- |
+| Environment | `staging` |
 | kind cluster | `argocd-postgres` |
 | kubectl context | `kind-argocd-postgres` |
 | Application namespace | `default` |
-| FastAPI and Postgres Argo CD Application | `myfastapiapp` |
-| Argo CD source path | `overlays/kind-postgres` |
+| FastAPI and Postgres Argo CD Application | `myfastapiapp-postgres-application` |
+| Argo CD source path | `apps/myfastapiapp/overlays/staging` |
 | App URL | http://myfastapiapp.localhost/api/v1/docs/ |
 | Argo CD UI | https://localhost:8080 |
 
 ```text
-myfastapiapp/                 # App image, configuration, Service, and Ingress
-  deployment.yaml            # App image, database Secret reference, and resource settings
-  kustomization.yaml         # Base resources imported by the Postgres overlay
-overlays/kind-postgres/       # Complete app and database deployment
-  kustomization.yaml
-  app-secrets.example.yaml   # Blank app Secret template
-  postgres-secrets.example.yaml
-  postgres-storage.yaml      # Laptop-backed PV/PVC with retention
-  postgres-statefulset.yaml
-  postgres-service.yaml
-  migration-job.yaml         # Alembic release step before new app Pods
+apps/myfastapiapp/
+  base/                      # API and migration Job shared by deployment variants
+    deployment.yaml
+    migration-job.yaml
+    configmap.yaml
+    service.yaml
+    ingress.yaml
+    kustomization.yaml
+  overlays/staging/          # Complete staging deployment
+    kustomization.yaml       # Imports the base; selects the API and Job image tag
+    app-secrets.example.yaml
+    postgres-secrets.example.yaml
+    postgres-storage.yaml    # Laptop-backed PV/PVC with retention
+    postgres-statefulset.yaml
+    postgres-service.yaml
+overlays/kind-postgres/
+  kustomization.yaml         # Compatibility entry point for the old Argo source path
 argocd/
-  myfastapiapp.yaml           # Registers the app and Postgres overlay
+  myfastapiapp.yaml           # Registers the existing Application at the staging path
   traefik.yaml                # Registers the shared Ingress controller
 kind/
   postgres-config.example.yaml
@@ -48,9 +62,11 @@ scripts/
   setup-ingress-kind.sh      # Traefik and the app gateway
 ```
 
-The deployment entry point is `overlays/kind-postgres`. The helper scripts
+The deployment entry point is `apps/myfastapiapp/overlays/staging`. The helper scripts
 select `argocd-postgres` by default. The base directory is included by the overlay;
 register `argocd/myfastapiapp.yaml` to manage FastAPI and Postgres together.
+For the running cluster, follow [Adopt the staging source path](#adopt-the-staging-source-path)
+after committing and pushing this reorganization.
 
 ## Open the app and Argo CD
 
@@ -99,8 +115,10 @@ port-forward and the app's HTTP gateway are independent connections.
 
 ## App configuration and credentials
 
-`myfastapiapp/configmap.yaml` supplies `APP_MESSAGE`. The app's image and memory
-settings live in `myfastapiapp/deployment.yaml`. The Deployment reads
+`apps/myfastapiapp/base/configmap.yaml` supplies `APP_MESSAGE`. The staging image
+version is `images[].newTag` in `apps/myfastapiapp/overlays/staging/kustomization.yaml`;
+Kustomize applies it to both the API Deployment and migration Job. Memory settings
+live in `apps/myfastapiapp/base/deployment.yaml`. The Deployment reads
 `AUTH_DATABASE_URL` from the `myfastapiapp-secrets` Secret. The overlay adds its
 dedicated Postgres database and persistent storage.
 
@@ -108,8 +126,8 @@ Provision these local files separately from Argo CD:
 
 | Git-ignored file | Kubernetes Secret | Required value |
 | --- | --- | --- |
-| `overlays/kind-postgres/app-secrets.yaml` | `myfastapiapp-secrets` | `AUTH_DATABASE_URL` |
-| `overlays/kind-postgres/postgres-secrets.yaml` | `myfastapiapp-postgres-secrets` | `POSTGRES_PASSWORD` |
+| `apps/myfastapiapp/overlays/staging/app-secrets.yaml` | `myfastapiapp-secrets` | `AUTH_DATABASE_URL` |
+| `apps/myfastapiapp/overlays/staging/postgres-secrets.yaml` | `myfastapiapp-postgres-secrets` | `POSTGRES_PASSWORD` |
 
 Follow [Create the database secrets](docs/postgres-kind.md#3-create-the-database-secrets)
 for the templates and matching password. Keep filled files at mode `600` and out
@@ -119,8 +137,8 @@ Apply an edited local Secret with:
 
 ```sh
 kubectl --context kind-argocd-postgres -n default apply \
-  -f overlays/kind-postgres/app-secrets.yaml \
-  -f overlays/kind-postgres/postgres-secrets.yaml
+  -f apps/myfastapiapp/overlays/staging/app-secrets.yaml \
+  -f apps/myfastapiapp/overlays/staging/postgres-secrets.yaml
 ```
 
 Changing a Secret or ConfigMap does not refresh environment variables in running
@@ -226,17 +244,17 @@ repositories: a Kubernetes Secret's base64 encoding is reversible. See
 
 The repository is [pquarg/deploy](https://github.com/pquarg/deploy). The Application
 in `argocd/myfastapiapp.yaml` uses `git@github.com:pquarg/deploy.git`, follows
-`HEAD`, and renders `overlays/kind-postgres`. The Application is named
-`myfastapiapp` and provides one place to review, sync, and check the health of
-both FastAPI and Postgres.
+`main`, and renders `apps/myfastapiapp/overlays/staging`. The Application is named
+`myfastapiapp-postgres-application`, labeled `environment: staging`, and provides
+one place to review, sync, and check the health of both FastAPI and Postgres.
 
 After committing and pushing the deployment files, connect the private repository
 under Argo CD **Settings -> Repositories**. Its Git credential is separate from
 the app image's `registry-credentials` Secret. See
 [Argo CD repository access](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/).
 
-On an existing cluster with `myfastapiapp-postgres-application`, follow
-[Rename the existing Application](#rename-the-existing-application) first.
+On the existing cluster, follow
+[Adopt the staging source path](#adopt-the-staging-source-path) first.
 For a fresh cluster, register the app once its Secrets and image are available:
 
 ```sh
@@ -249,22 +267,32 @@ resources that drift from Git. The `traefik` Application manages the shared
 controller separately. On a fresh cluster, follow the
 [installation steps](docs/postgres-kind.md#7-install-argo-cd-and-expose-the-app).
 
-### Rename the existing Application
+### Adopt the staging source path
 
-Changing `metadata.name` creates a new Application registration. If your cluster
-still uses `myfastapiapp-postgres-application`, replace that registration before
-applying `argocd/myfastapiapp.yaml`:
+The Application's source path is a live setting. Pushing changes to its YAML file
+does not update that registration because the Application does not manage its
+own `argocd/` directory.
 
-1. Commit and push these manifests, then let any active sync finish.
-2. In the Argo CD UI, delete `myfastapiapp-postgres-application` with
-   **Non-Cascading (Orphan)**. This preserves the running workloads and storage.
-   See [Argo CD non-cascading deletion](https://argo-cd.readthedocs.io/en/stable/user-guide/app_deletion/#3-non-cascading-orphan).
-3. Apply `argocd/myfastapiapp.yaml` using the command above. Let `myfastapiapp`
-   sync and adopt the existing FastAPI and Postgres resources.
+1. Commit and push this repository. The old `overlays/kind-postgres` path remains
+   a compatibility entry point importing the staging overlay, so Argo can still
+   render the same resources during the transition.
+2. Update the existing registration:
 
-The UI should then show `myfastapiapp` for the product and `traefik` for the shared
-Ingress controller. The Deployment, StatefulSet, Services, PV, and PVC keep their
-existing names.
+   ```sh
+   kubectl --context kind-argocd-postgres apply -f argocd/myfastapiapp.yaml
+   ```
+
+   This sets the source path and keeps the current Application name and resource
+   ownership. It also enables automatic sync as declared in the file. If you are
+   deliberately keeping auto-sync disabled, edit only **App Details -> Source ->
+   Path** in the UI to `apps/myfastapiapp/overlays/staging` instead.
+3. Refresh Argo CD and confirm **Synced / Healthy**. The rendered workload and
+   storage identities are unchanged. The compatibility entry point can be removed
+   in a later commit after all registrations use the staging path.
+
+The app registration remains `myfastapiapp-postgres-application`; `traefik` manages
+the shared Ingress controller. This reorganization does not rename the Kubernetes
+workloads, namespace, Secrets, PV/PVC, kind cluster, host directory, or Git repository.
 
 ## Manual deployment and validation
 
@@ -274,17 +302,20 @@ For initial bootstrap before Argo CD manages the app:
 ./scripts/deploy-kind.sh
 ```
 
-The script deploys `overlays/kind-postgres`, waits for Postgres, then waits for
-FastAPI. It accepts an optional kind cluster name; that cluster must have the
-storage mount and separately provisioned Secrets. Once Argo CD owns the app,
+The script renders `apps/myfastapiapp/overlays/staging`, applies supporting resources,
+waits for Postgres, runs and waits for the migration Job, then applies and waits
+for FastAPI. Plain kubectl does not interpret Argo's hook annotations or waves,
+so the script performs this ordering explicitly. It accepts an optional kind
+cluster name; that cluster must have the storage mount and separately provisioned
+Secrets. Once Argo CD owns the app,
 use Git commits and sync for routine changes.
 
 To preview and validate resources without persisting changes:
 
 ```sh
-kubectl kustomize overlays/kind-postgres
+kubectl kustomize apps/myfastapiapp/overlays/staging
 kubectl --context kind-argocd-postgres -n default \
-  apply --dry-run=server -k overlays/kind-postgres
+  apply --dry-run=server -k apps/myfastapiapp/overlays/staging
 ```
 
 To refresh or stop the HTTP gateway directly:
@@ -306,25 +337,24 @@ share the same controller and gateway.
 
 1. Build and publish a new image from the app repository, or build and load it
    into `argocd-postgres` for local use. Keep the app version and lockfile in sync.
-2. Update `image` in `myfastapiapp/deployment.yaml` and
-   `overlays/kind-postgres/migration-job.yaml` to the same version.
+2. Update `images[].newTag` in
+   `apps/myfastapiapp/overlays/staging/kustomization.yaml`. This selects the same
+   release for the API and migration Job; leave the base image defaults alone.
 3. For a database change, follow the backup and controlled sync steps below
    before pushing. For other changes, commit and push, then wait for Argo CD to sync.
 
 Use a new image tag for each code release. Manifest-only edits, such as resource
 settings, replicas, and Ingress rules, need only a deployment-repository commit.
 FastAPI keeps its app release version; PostgreSQL has its own image version in
-`overlays/kind-postgres/postgres-statefulset.yaml`. Both are deployed through the
-same Application.
+`apps/myfastapiapp/overlays/staging/postgres-statefulset.yaml`. Both are deployed
+through the same Application.
 See [image publishing](docs/postgres-kind.md#4-make-the-app-image-available)
 if a failed release skipped image publication.
 
 ### Back up and release a database change
 
 1. Disable auto-sync in the live Application's Argo CD **App Details** and let
-   any active sync finish. The Application may still be named
-   `myfastapiapp-postgres-application` on an older setup. Use its existing name
-   for this release; follow the separate rename instructions later. Editing
+   any active sync finish. Select `myfastapiapp-postgres-application`. Editing
    `argocd/myfastapiapp.yaml` alone does not change the live policy. Reapplying
    its current configuration enables auto-sync again.
 2. During a quiet window, run the backup script and continue only if it succeeds:
@@ -352,13 +382,13 @@ if a failed release skipped image publication.
    ./scripts/backup-postgres.sh argocd-postgres /absolute/path/outside-the-repo/backups
    ```
 
-3. Validate the overlay, review the diff, then commit and push the image and
-   migration changes together. Include the new `migration-job.yaml` file:
+3. Validate the overlay, review the diff, then commit and push the release image
+   selection and any manifest changes together:
 
    ```sh
-   kubectl kustomize overlays/kind-postgres > /dev/null
+   kubectl kustomize apps/myfastapiapp/overlays/staging > /dev/null
    kubectl --context kind-argocd-postgres -n default \
-     apply --dry-run=server -k overlays/kind-postgres
+     apply --dry-run=server -k apps/myfastapiapp/overlays/staging
    git diff --check
    ```
 
