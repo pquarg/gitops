@@ -28,7 +28,7 @@ fi
 for app_directory in "${app_directories[@]}"; do
   app_directory="${app_directory%/}"
   app_name="${app_directory#apps/}"
-  # The directory name becomes a Kubernetes namespace and part of an Application name.
+  # New apps use the directory name for their namespace and Application naming.
   if (( ${#app_name} > 63 )) || [[ ! "$app_name" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
     printf 'Error: app directory %s must be a DNS label of at most 63 characters.\n' "$app_name" >&2
     exit 1
@@ -40,7 +40,11 @@ for app_directory in "${app_directories[@]}"; do
       ;;
   esac
   if [[ ! -f "$app_directory/kustomization.yaml" ]]; then
-    printf 'Error: %s needs a root kustomization.yaml for automatic discovery.\n' "$app_directory" >&2
+    printf 'Error: %s needs a root kustomization.yaml for deployment.\n' "$app_directory" >&2
+    exit 1
+  fi
+  if [[ ! -f "argocd/${app_name}.yaml" ]]; then
+    printf 'Error: %s needs an Application registration in argocd/%s.yaml; see docs/adding-apps.md.\n' "$app_directory" "$app_name" >&2
     exit 1
   fi
   printf 'Rendering %s\n' "$app_directory"

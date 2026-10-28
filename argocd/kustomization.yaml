@@ -3,4 +3,3 @@ kind: Kustomization
 resources:
   - myfastapiapp.yaml
   - traefik.yaml
-  - apps.yaml

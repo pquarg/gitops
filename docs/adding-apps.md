@@ -1,9 +1,10 @@
 # Add an app
 
 Each immediate directory under `apps/` is a deployable app with a root
-`kustomization.yaml`. The ApplicationSet in `argocd/apps.yaml` discovers these
-directories from `main` and creates `staging-<directory>` in Argo CD, targeting a
-namespace named exactly `<directory>`.
+`kustomization.yaml` and an explicit Application registration in
+`argocd/<directory>.yaml`. List that registration in `argocd/kustomization.yaml`.
+The root `staging-bootstrap` Application manages these registrations from `main`;
+each app syncs independently into its own namespace.
 
 Use a lowercase DNS label of at most 63 characters, such as `billing-api`. Reserve
 `myfastapiapp`, `argocd`, `traefik`, `default`, `bootstrap`, and names beginning `kube-`; the
@@ -68,7 +69,41 @@ New apps share the cluster's existing Argo CD `default` project. Namespaces orga
 namespaced resources; they do not by themselves enforce network or tenant isolation.
 Add AppProjects, RBAC, quotas or NetworkPolicies when access or capacity needs require them.
 
-## Credentials and registration
+## Register the app
+
+Create `argocd/billing-api.yaml`:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: staging-billing-api
+  namespace: argocd
+  labels:
+    environment: staging
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:pquarg/deploy.git
+    targetRevision: main
+    path: apps/billing-api
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: billing-api
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
+
+Add `- billing-api.yaml` to the `resources` list in `argocd/kustomization.yaml`.
+Use `staging-<directory>` for new Application names and `<directory>` for their
+destination namespace. Only the root Application manages registrations; child
+Applications point directly at their app directory. The root preserves live
+auto-sync pauses through `ignoreDifferences` and `RespectIgnoreDifferences=true`.
+
+## Provision credentials and deploy
 
 Before pushing an auto-deployed app, create its namespace and any required Secrets:
 
@@ -88,24 +123,30 @@ kubectl --context kind-argocd-postgres -n billing-api \
   apply --dry-run=server -k apps/billing-api
 ```
 
-Review, commit and push the app manifests. CI discovers the root Kustomization
-automatically. The ApplicationSet creates the Application from Git; no extra
-registration file or shared ingress script change is needed. Check the generated
+Review, commit and push the app manifests, Application registration and updated
+`argocd/kustomization.yaml` together. CI renders every app's root Kustomization
+and the registrations. The root Application creates the app's Application from
+Git; no shared ingress script change is needed. Check the
 `staging-billing-api` Application's sync/health and test its hostname. Add the app
 to the README registry and keep its release/backup runbook in its own directory.
 
 For database releases, pause the live Application's automatic sync and resume it
-after verification. `ignoreApplicationDifferences` preserves the pause while the
-ApplicationSet updates other fields. See [Argo CD's maintenance pause guidance](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Controlling-Resource-Modification/#allow-temporarily-toggling-auto-sync).
+after verification. The root preserves the pause while updating other fields.
+Applying the child registration directly with `kubectl apply` enables its
+declared auto-sync policy again; use the root bootstrap for routine setup. See
+[Argo CD's child Application difference handling](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/#ignoring-differences-in-child-applications).
 
-Application auto-pruning is disabled by default. If a directory is removed, its
-generated Application is removed, while `preserveResourcesOnDeletion: true`
-preserves workloads. Pause the app before retiring it and deliberately clean up
-its resources; removing Git files alone is not a complete decommission procedure.
+Automatic pruning is disabled for the root and app Applications. To retire an
+app, pause its sync, remove its registration from `argocd/kustomization.yaml` and
+Git, and let the root refresh. Then deliberately delete its live Application and
+clean up its workloads, retaining or backing up its data as required. Removing
+Git files alone leaves the live Application and workloads in place. Registrations
+omit cascading-deletion finalizers, so deleting a registration with `kubectl`
+does not delete its workloads.
 
 ## Move the existing app to a namespace later
 
-`myfastapiapp` remains excluded from automatic discovery to retain Application
+`argocd/myfastapiapp.yaml` retains Application
 `myfastapiapp-postgres-application` and its existing volume binding in `default`.
 Moving it requires a separate maintenance window: back up and verify recovery,
 pause sync and stop writers, plan the retained PV's claim rebinding or restore

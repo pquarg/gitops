@@ -54,8 +54,6 @@ kubectl --context kind-argocd-postgres -n argocd apply --server-side \
   -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.5/manifests/install.yaml
 kubectl --context kind-argocd-postgres -n argocd \
   rollout status deployment/argocd-server --timeout=300s
-kubectl --context kind-argocd-postgres -n argocd \
-  rollout status deployment/argocd-applicationset-controller --timeout=300s
 ```
 
 Keep this running in another terminal:
@@ -77,10 +75,8 @@ printf '\n'
 
 Use your replacement password if it was already changed. Under **Settings ->
 Repositories**, connect `git@github.com:pquarg/deploy.git` with a read-only Git
-credential. The ApplicationSet uses this same repository, so use a repository
-credential without a project scope. This is separate from GHCR authentication.
-See [Argo CD installation](https://argo-cd.readthedocs.io/en/stable/getting_started/)
-and [Git generator credentials](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators-Git/#repository-credentials-for-applicationsets).
+credential usable by the `default` project. This is separate from GHCR authentication.
+See [Argo CD installation](https://argo-cd.readthedocs.io/en/stable/getting_started/).
 
 ## 3. Prepare the apps
 
@@ -107,8 +103,9 @@ kubectl --context kind-argocd-postgres -n argocd get applications
 ```
 
 `bootstrap-kind.sh` applies only the root registration. The root Application
-manages the existing app registration, shared Traefik registration, and new-app
-ApplicationSet. The app Application applies storage, waits for Postgres, runs
+manages the explicit app and Traefik registrations listed in
+`argocd/kustomization.yaml`. Each app Application applies its own resources. For
+`myfastapiapp`, it applies storage, waits for Postgres, runs
 Alembic migrations, and rolls out the API. There is no separate kubectl deployment
 sequence. Root **Synced** means registrations were applied; wait for the app's
 own **Synced / Healthy** status before testing it.

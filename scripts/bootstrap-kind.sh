@@ -20,7 +20,6 @@ project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 kube=(kubectl "--context=kind-${cluster}" --namespace=argocd)
 
 "${kube[@]}" rollout status deployment/argocd-server --timeout=180s
-"${kube[@]}" rollout status deployment/argocd-applicationset-controller --timeout=180s
 printf 'Registering staging applications from Git\n'
 "${kube[@]}" apply -f "$project_root/bootstrap/staging.yaml"
 "${kube[@]}" wait --for=jsonpath='{.status.sync.status}'=Synced \

@@ -13,6 +13,8 @@ Each app directory is a complete staging deployment; no environment overlays are
 
 The existing app retains its namespace and Application name to preserve its
 Postgres volume binding and resource ownership. Each new app gets its own namespace.
+One root Argo CD Application manages explicit app registrations and the shared
+Traefik registration. Each app syncs independently.
 
 ```text
 apps/
@@ -29,8 +31,8 @@ apps/
   <app>/                    # Each app has a root kustomization.yaml
 argocd/
   kustomization.yaml        # Registrations managed from Git by staging-bootstrap
-  apps.yaml                 # ApplicationSet discovers new apps under apps/*
-  myfastapiapp.yaml          # Existing app registration, explicitly preserved
+  myfastapiapp.yaml          # Existing app registration
+  <app>.yaml                # One explicit Application registration per new app
   traefik.yaml              # Shared ingress controller
 bootstrap/staging.yaml      # Root Argo CD Application; apply once per cluster
 kind/

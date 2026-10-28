@@ -14,7 +14,8 @@ Run from any directory:
 From this repository root, use `./scripts/validate.sh`. It checks:
 
 - Bash syntax for every script under `scripts/` and `apps/`.
-- App directory names and every `apps/*/kustomization.yaml` deployment entry point.
+- App directory names, every `apps/*/kustomization.yaml` deployment entry point,
+  and the presence of a matching `argocd/<app>.yaml` Application registration.
 - Rendered app resources, Argo CD registrations and the bootstrap Application
   against schemas, with unknown kinds and unknown fields treated as failures.
 
