@@ -3,16 +3,16 @@ set -euo pipefail
 
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_root"
-for required_command in kubectl kubeconform docker; do
+for required_command in kubectl kubeconform; do
   if ! command -v "$required_command" > /dev/null; then
     printf 'Error: %s is required; see docs/validation.md.\n' "$required_command" >&2
     exit 1
   fi
 done
 
-for script in scripts/*.sh; do
+while IFS= read -r -d '' script; do
   bash -n "$script"
-done
+done < <(find scripts apps -type f -name '*.sh' -print0)
 
 render_dir="$(mktemp -d)"
 trap 'rm -rf -- "$render_dir"' EXIT
@@ -57,6 +57,4 @@ kubeconform -strict -summary \
   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
   "$render_dir"/*.yaml
 
-# Kept only for clusters created before direct kind port mappings were added.
-KIND_NODE=validation-control-plane docker compose -f kind/legacy/compose.yaml config --quiet
 printf 'Deployment configuration checks passed.\n'

@@ -1,7 +1,7 @@
-# Reset the development Kubernetes database
+# Reset the myfastapiapp staging database
 
-This procedure deletes application data in the development cluster. For ordinary
-schema changes, use the [backup and release workflow](releases.md#back-up-and-release-a-database-change)
+This procedure deletes application data in the staging cluster. For ordinary
+schema changes, use the [backup and release workflow](../README.md#back-up-and-release-a-database-change)
 and add new Alembic revisions.
 
 ## Historical baseline reset
@@ -41,7 +41,7 @@ the app's `public` schema while preserving PostgreSQL storage, its role, and
 Secrets.
 
 1. Make the intended app image available using the
-   [image preparation instructions](postgres-kind.md#4-make-the-app-image-available).
+   [image preparation instructions](../README.md#make-the-app-image-available).
    Use the release selected in `apps/myfastapiapp/kustomization.yaml`; its image
    tag applies to both the API Deployment and migration Job. No historical
    release tag needs to be copied from this runbook.

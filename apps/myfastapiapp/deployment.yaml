@@ -18,7 +18,7 @@ spec:
         - name: registry-credentials
       containers:
         - name: myfastapiapp-container
-          # The consuming Kustomize overlay supplies the release tag.
+          # The app's kustomization.yaml supplies the release tag.
           image: ghcr.io/pquarg/myfastapiapp
           imagePullPolicy: IfNotPresent
           ports:
