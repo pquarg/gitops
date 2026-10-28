@@ -10,6 +10,38 @@ Fresh clusters can follow [setup](setup.md). An existing `myfastapiapp` in
 Secrets or data. The bootstrap script refuses to register the new configuration
 while the old Application or its PVC still exists.
 
+## Rename the root Application
+
+The root Application is named `staging-root`. Existing clusters may still have
+`staging-bootstrap`. Kubernetes resource names cannot be changed in place;
+replace only the root registration and preserve its managed resources.
+This rename can be performed independently of the namespace migration below.
+
+Pause the old root and wait for any active sync to finish in Argo CD:
+
+```sh
+kubectl --context kind-argocd-postgres -n argocd patch application staging-bootstrap \
+  --type merge -p '{"spec":{"syncPolicy":{"automated":{"enabled":false}}}}'
+```
+
+Remove its deletion finalizers and delete it without cascading, then register
+the new root. Do not use a cascading deletion in the Argo CD UI:
+
+```sh
+kubectl --context kind-argocd-postgres -n argocd patch application staging-bootstrap \
+  --type merge -p '{"metadata":{"finalizers":null}}'
+kubectl --context kind-argocd-postgres -n argocd delete application staging-bootstrap \
+  --cascade=orphan
+kubectl --context kind-argocd-postgres -n argocd apply -f root/staging.yaml
+kubectl --context kind-argocd-postgres -n argocd wait \
+  --for=jsonpath='{.status.sync.status}'=Synced application/staging-root --timeout=300s
+```
+
+The new root adopts the existing registrations. Child Applications, workloads,
+Secrets and storage remain in place. It still deploys the revision published on
+GitHub `main`; renaming the root does not publish local changes. Verify the root
+and child Applications show **Synced / Healthy**.
+
 ## Move myfastapiapp out of default
 
 This procedure requires downtime. It keeps the PostgreSQL 17 data directory at
@@ -24,11 +56,12 @@ original database password and laptop storage directory throughout.
 
 ### 1. Pause registration and application sync
 
-If `staging-bootstrap` already exists, disable its auto-sync and wait for any
-active root sync to finish:
+If `staging-root` already exists, disable its auto-sync and wait for any
+active root sync to finish. If the root has not been renamed yet, use
+`staging-bootstrap` instead:
 
 ```sh
-kubectl --context kind-argocd-postgres -n argocd patch application staging-bootstrap \
+kubectl --context kind-argocd-postgres -n argocd patch application staging-root \
   --type merge -p '{"spec":{"syncPolicy":{"automated":{"enabled":false}}}}'
 ```
 

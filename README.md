@@ -33,10 +33,10 @@ apps/
     README.md               # App setup, releases, verification and recovery
   <app>/                    # Each app has a root kustomization.yaml
 argocd/
-  kustomization.yaml        # Registrations managed from Git by staging-bootstrap
+  kustomization.yaml        # Registrations managed from Git by staging-root
   apps.yaml                 # Discovers every app under apps/*
   traefik.yaml              # Shared ingress controller
-bootstrap/staging.yaml      # Root Argo CD Application; apply once per cluster
+root/staging.yaml           # Root Argo CD Application; apply once per cluster
 kind/
   cluster.example.yaml      # One parent storage mount and direct localhost mapping
 scripts/

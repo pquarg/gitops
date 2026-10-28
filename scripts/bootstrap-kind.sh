@@ -29,11 +29,18 @@ if [[ -n "$legacy_application" || -n "$legacy_claim" ]]; then
   exit 1
 fi
 
+legacy_root="$("${kube[@]}" get application staging-bootstrap --ignore-not-found -o name)"
+if [[ -n "$legacy_root" ]]; then
+  printf 'Error: rename staging-bootstrap before registering staging-root.\n' >&2
+  printf 'Follow docs/repository-upgrade.md#rename-the-root-application.\n' >&2
+  exit 1
+fi
+
 "${kube[@]}" rollout status deployment/argocd-server --timeout=180s
 "${kube[@]}" rollout status deployment/argocd-applicationset-controller --timeout=180s
 printf 'Registering staging applications from Git\n'
-"${kube[@]}" apply -f "$project_root/bootstrap/staging.yaml"
+"${kube[@]}" apply -f "$project_root/root/staging.yaml"
 "${kube[@]}" wait --for=jsonpath='{.status.sync.status}'=Synced \
-  application/staging-bootstrap --timeout=300s
+  application/staging-root --timeout=300s
 printf 'Registrations synced. App discovery, migrations and rollouts continue through Argo CD.\n'
 "${kube[@]}" get applications

@@ -102,7 +102,7 @@ kubectl --context kind-argocd-postgres -n argocd get applications
 ```
 
 `bootstrap-kind.sh` waits for the Argo CD server and ApplicationSet controller,
-then applies only the root registration. The root Application manages the
+then applies only the `staging-root` registration. The root Application manages the
 ApplicationSet and Traefik registrations listed in `argocd/kustomization.yaml`.
 The ApplicationSet discovers every `apps/*` directory and creates an independent
 Application for each, including `staging-myfastapiapp` in namespace `myfastapiapp`.

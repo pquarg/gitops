@@ -7,7 +7,8 @@ namespace `argocd`, targeting a workload namespace named `<directory>`.
 Adding an app requires no individual registration file or central list edit.
 
 Use a lowercase DNS label of at most 63 characters, such as `billing-api`. Reserve
-`argocd`, `traefik`, `default`, `bootstrap`, and names beginning `kube-`.
+`argocd`, `traefik`, `default`, `bootstrap`, `root`, and names beginning `kube-`.
+`root` is reserved because `staging-root` names the root Application.
 Use a name that is not already present under `apps/`.
 
 ## App files

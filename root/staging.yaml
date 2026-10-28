@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: staging-bootstrap
+  name: staging-root
   namespace: argocd
 spec:
   project: default

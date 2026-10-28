@@ -17,7 +17,7 @@ From this repository root, use `./scripts/validate.sh`. It checks:
 - App directory names and every `apps/*/kustomization.yaml` deployment entry point.
   New apps are discovered automatically and need no individual registration file.
 - Rendered app resources, the ApplicationSet, shared registrations and the
-  bootstrap Application against schemas, with unknown kinds and fields treated
+  root Application against schemas, with unknown kinds and fields treated
   as failures.
 
 Built-in resources use Kubernetes `1.36.0` schemas by default. Set

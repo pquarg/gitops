@@ -34,7 +34,7 @@ for app_directory in "${app_directories[@]}"; do
     exit 1
   fi
   case "$app_name" in
-    argocd|traefik|default|bootstrap|kube-*)
+    argocd|traefik|default|bootstrap|root|kube-*)
       printf 'Error: app directory %s conflicts with a reserved namespace or registration.\n' "$app_name" >&2
       exit 1
       ;;
@@ -47,7 +47,7 @@ for app_directory in "${app_directories[@]}"; do
   kubectl kustomize "$app_directory" > "$render_dir/app-${app_name}.yaml"
 done
 kubectl kustomize argocd > "$render_dir/registrations.yaml"
-cp bootstrap/staging.yaml "$render_dir/bootstrap.yaml"
+cp root/staging.yaml "$render_dir/root.yaml"
 
 # Fail on unknown kinds as well as invalid resources. Add a schema source when
 # introducing CRDs; never silently skip resources whose schemas are missing.
