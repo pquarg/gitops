@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: staging-bootstrap
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:pquarg/deploy.git
+    targetRevision: main
+    path: argocd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  ignoreDifferences:
+    - group: argoproj.io
+      kind: Application
+      jsonPointers:
+        # Preserve maintenance pauses and Argo CD's transient operation fields.
+        - /spec/syncPolicy/automated
+        - /metadata/annotations/argocd.argoproj.io~1refresh
+        - /operation
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+      - RespectIgnoreDifferences=true

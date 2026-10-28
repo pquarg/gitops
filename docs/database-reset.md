@@ -1,7 +1,7 @@
 # Reset the development Kubernetes database
 
 This procedure deletes application data in the development cluster. For ordinary
-schema changes, use the [backup and release workflow](../README.md#back-up-and-release-a-database-change)
+schema changes, use the [backup and release workflow](releases.md#back-up-and-release-a-database-change)
 and add new Alembic revisions.
 
 ## Historical baseline reset
@@ -54,8 +54,8 @@ Secrets.
      -p '{"spec":{"syncPolicy":{"automated":{"enabled":false}}}}'
    ```
 
-   Editing `argocd/myfastapiapp.yaml` alone does not update the live policy.
-   Reapplying its current configuration enables auto-sync again. Commit and push
+   The root registration controller preserves the live pause. Applying
+   `argocd/myfastapiapp.yaml` directly enables auto-sync again. Commit and push
    any release-image selection change while auto-sync remains disabled.
 
 3. Stop the API and wait for its Pods to disappear:

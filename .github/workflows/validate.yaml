@@ -12,24 +12,28 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    env:
+      KUBECTL_VERSION: v1.36.1
+      KUBECONFORM_VERSION: v0.8.0
+      KUBERNETES_VERSION: "1.36.0"
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Check shell script syntax
+      - name: Install pinned validation tools
         run: |
-          bash -n scripts/deploy-kind.sh
-          bash -n scripts/setup-ingress-kind.sh
-          bash -n scripts/backup-postgres.sh
+          tool_dir="$(mktemp -d)"
+          cd "$tool_dir"
+          curl -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          curl -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
+          printf '%s  kubectl\n' "$(cat kubectl.sha256)" | sha256sum --check
+          curl -fsSLO "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          curl -fsSLO "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/CHECKSUMS"
+          sha256sum --check --ignore-missing CHECKSUMS
+          tar -xzf kubeconform-linux-amd64.tar.gz kubeconform
+          chmod +x kubectl kubeconform
+          echo "$tool_dir" >> "$GITHUB_PATH"
 
-      - name: Render Kubernetes manifests
-        run: |
-          kubectl kustomize apps/myfastapiapp/base > /dev/null
-          kubectl kustomize apps/myfastapiapp/overlays/postgres > /dev/null
-          kubectl kustomize apps/myfastapiapp > /dev/null
-
-      - name: Validate Docker Compose configuration
-        env:
-          KIND_NODE: argocd-postgres-control-plane
-        run: docker compose -f kind/compose.yaml config --quiet
+      - name: Validate all app deployments and registrations
+        run: ./scripts/validate.sh

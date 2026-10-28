@@ -28,8 +28,7 @@ if [[ -z "$node" ]]; then
   exit 1
 fi
 
-printf 'Installing the shared Traefik controller through Argo CD\n'
-kubectl --context="$context" apply -f "$project_root/argocd/traefik.yaml"
+printf 'Waiting for the shared Traefik controller managed by Argo CD\n'
 kubectl --context="$context" --namespace=argocd wait \
   --for=jsonpath='{.status.sync.status}'=Synced application/traefik --timeout=180s
 kubectl --context="$context" --namespace=traefik wait \
@@ -37,15 +36,20 @@ kubectl --context="$context" --namespace=traefik wait \
 kubectl --context="$context" --namespace=traefik \
   rollout status deployment/traefik --timeout=180s
 
-printf 'Exposing the shared HTTP entry point on 127.0.0.1:80\n'
-KIND_NODE="$node" docker compose --project-name "kind-ingress-${cluster}" \
-  -f "$project_root/kind/compose.yaml" up -d
+direct_mapping=false
+while IFS= read -r candidate_node; do
+  port_bindings="$(docker inspect --format '{{range (index .HostConfig.PortBindings "30080/tcp")}}{{.HostIp}}:{{.HostPort}}{{"\n"}}{{end}}' "$candidate_node")"
+  if [[ "$port_bindings" == "127.0.0.1:80" ]]; then
+    direct_mapping=true
+    break
+  fi
+done <<< "$nodes"
 
-printf 'Applying the app Ingress for the initial local setup\n'
-kubectl --context="$context" --namespace=default apply -f "$project_root/apps/myfastapiapp/base/ingress.yaml"
-kubectl --context="$context" --namespace=default wait \
-  --for=jsonpath='{.status.loadBalancer.ingress[0].ip}'=127.0.0.1 \
-  ingress/myfastapiapp-ingress --timeout=60s
-
-printf 'Open http://myfastapiapp.localhost/api/v1/docs/\n'
-printf 'Commit and push this deploy repository so Argo CD manages the app route.\n'
+if [[ "$direct_mapping" == true ]]; then
+  printf 'kind maps 127.0.0.1:80 directly to Traefik; no gateway container is needed.\n'
+else
+  printf 'Existing cluster has no direct localhost mapping; starting the legacy gateway.\n'
+  KIND_NODE="$node" docker compose --project-name "kind-ingress-${cluster}" \
+    -f "$project_root/kind/legacy/compose.yaml" up -d
+fi
+printf 'Shared ingress is ready. Each app supplies its own hostname and Ingress through Git.\n'

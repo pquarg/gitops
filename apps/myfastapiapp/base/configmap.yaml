@@ -3,4 +3,4 @@ kind: ConfigMap
 metadata:
   name: myfastapiapp-config
 data:
-  APP_MESSAGE: "Hello from FastAPI on kind!"
+  APP_MESSAGE: "Hello from FastAPI!"
