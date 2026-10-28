@@ -32,8 +32,8 @@ the remaining steps apply to the Kubernetes database.
 ## Reset the Kubernetes database
 
 Run deployment commands from this deployment repository. The target is context
-`kind-argocd-postgres`, namespace `default`, database `myfastapiapp`, and Argo CD
-Application `myfastapiapp-postgres-application`.
+`kind-argocd-postgres`, namespace `myfastapiapp`, database `myfastapiapp`, and Argo CD
+Application `staging-myfastapiapp`.
 
 PostgreSQL has a retained PV/PVC backed by a laptop directory. Recreating its
 Pod, PVC, or kind cluster does not clear that directory. The reset below replaces
@@ -50,20 +50,20 @@ Secrets.
 
    ```sh
    kubectl --context kind-argocd-postgres -n argocd patch application \
-     myfastapiapp-postgres-application --type merge \
+     staging-myfastapiapp --type merge \
      -p '{"spec":{"syncPolicy":{"automated":{"enabled":false}}}}'
    ```
 
-   The root registration controller preserves the live pause. Applying
-   `argocd/myfastapiapp.yaml` directly enables auto-sync again. Commit and push
-   any release-image selection change while auto-sync remains disabled.
+   The ApplicationSet preserves the live pause through
+   `ignoreApplicationDifferences`. Commit and push any release-image selection
+   change while auto-sync remains disabled.
 
 3. Stop the API and wait for its Pods to disappear:
 
    ```sh
-   kubectl --context kind-argocd-postgres -n default scale \
+   kubectl --context kind-argocd-postgres -n myfastapiapp scale \
      deployment/myfastapiapp-deployment --replicas=0
-   kubectl --context kind-argocd-postgres -n default wait \
+   kubectl --context kind-argocd-postgres -n myfastapiapp wait \
      --for=delete pod -l app=myfastapiapp-pod --timeout=120s
    ```
 
@@ -71,7 +71,7 @@ Secrets.
    schema, including accounts, sessions, and migration version tables:
 
    ```sh
-   kubectl --context kind-argocd-postgres -n default exec \
+   kubectl --context kind-argocd-postgres -n myfastapiapp exec \
      myfastapiapp-postgres-statefulset-0 -c postgres -- \
      psql -X -v ON_ERROR_STOP=1 --single-transaction \
      -U myfastapiapp -d myfastapiapp \
@@ -86,10 +86,10 @@ Secrets.
 6. Verify migration completion, rollout, and database revision:
 
    ```sh
-   kubectl --context kind-argocd-postgres -n default logs job/myfastapiapp-migrate
-   kubectl --context kind-argocd-postgres -n default rollout status \
+   kubectl --context kind-argocd-postgres -n myfastapiapp logs job/myfastapiapp-migrate
+   kubectl --context kind-argocd-postgres -n myfastapiapp rollout status \
      deployment/myfastapiapp-deployment --timeout=180s
-   kubectl --context kind-argocd-postgres -n default exec \
+   kubectl --context kind-argocd-postgres -n myfastapiapp exec \
      deployment/myfastapiapp-deployment -- \
      python -m alembic current --check-heads
    curl -fsS http://myfastapiapp.localhost/health
@@ -104,7 +104,7 @@ Secrets.
 
    ```sh
    kubectl --context kind-argocd-postgres -n argocd patch application \
-     myfastapiapp-postgres-application --type merge \
+     staging-myfastapiapp --type merge \
      -p '{"spec":{"syncPolicy":{"automated":{"enabled":true}}}}'
    ```
 

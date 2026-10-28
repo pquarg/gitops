@@ -15,7 +15,7 @@ spec:
   # Bind this fixed local directory, rather than the default provisioner's disk.
   storageClassName: ""
   claimRef:
-    namespace: default
+    namespace: myfastapiapp
     name: myfastapiapp-postgres-pvc
   local:
     path: /mnt/myfastapiapp-postgres
@@ -23,7 +23,7 @@ spec:
     required:
       nodeSelectorTerms:
         - matchExpressions:
-            - key: myfastapiapp.local/postgres-storage
+            - key: staging.local/postgres-storage
               operator: In
               values:
                 - "true"

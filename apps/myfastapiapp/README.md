@@ -6,14 +6,16 @@ and Alembic revisions live in the separate `myfastapiapp` repository.
 | Setting | Value |
 | --- | --- |
 | Cluster context | `kind-argocd-postgres` |
-| Namespace | `default` |
-| Argo CD Application | `myfastapiapp-postgres-application` |
+| Namespace | `myfastapiapp` |
+| Argo CD Application | `staging-myfastapiapp` |
 | URL | http://myfastapiapp.localhost/api/v1/docs/ |
 
 This app owns its Postgres database, storage, credentials, migrations and backup
-procedure. Its existing namespace and Application name preserve resource
-ownership and the retained volume binding. New apps follow the shared
-[app convention](../../docs/adding-apps.md).
+procedure. The shared ApplicationSet discovers this directory and creates its
+Application and namespace using the same [convention as every app](../../docs/adding-apps.md).
+For an installation still running in `default`, complete the
+[one-time migration](../../docs/repository-upgrade.md#move-myfastapiapp-out-of-default)
+before deploying these manifests.
 
 The root `kustomization.yaml` includes all app and Postgres resources and selects
 one release image for both the API and migration Job. Edit `configmap.yaml` for
@@ -22,9 +24,9 @@ routing. Provision the [cluster](../../docs/setup.md) before the first sync.
 
 ## Provision credentials
 
-Provision these Secrets in namespace `default` before the first sync:
+Provision these Secrets in namespace `myfastapiapp` before the first sync:
 
-| Ignored file or credential | Secret in namespace `default` |
+| Ignored file or credential | Secret in namespace `myfastapiapp` |
 | --- | --- |
 | `apps/myfastapiapp/app-secrets.yaml` | `myfastapiapp-secrets` with `AUTH_DATABASE_URL` |
 | `apps/myfastapiapp/postgres/postgres-secrets.yaml` | `myfastapiapp-postgres-secrets` with `POSTGRES_PASSWORD` |
@@ -33,6 +35,7 @@ Provision these Secrets in namespace `default` before the first sync:
 For the database files:
 
 ```sh
+kubectl --context kind-argocd-postgres create namespace myfastapiapp
 cp -n apps/myfastapiapp/app-secrets.example.yaml apps/myfastapiapp/app-secrets.yaml
 cp -n apps/myfastapiapp/postgres/postgres-secrets.example.yaml \
   apps/myfastapiapp/postgres/postgres-secrets.yaml
@@ -50,7 +53,7 @@ For special characters, URL-encode the password in the URL and keep the original
 value in `POSTGRES_PASSWORD`.
 
 ```sh
-kubectl --context kind-argocd-postgres -n default apply \
+kubectl --context kind-argocd-postgres -n myfastapiapp apply \
   -f apps/myfastapiapp/app-secrets.yaml \
   -f apps/myfastapiapp/postgres/postgres-secrets.yaml
 ```
@@ -67,9 +70,9 @@ values consumed as environment variables do not refresh in running Pods. After
 applying a Secret or syncing a ConfigMap, restart the app through Argo CD or run:
 
 ```sh
-kubectl --context kind-argocd-postgres -n default \
+kubectl --context kind-argocd-postgres -n myfastapiapp \
   rollout restart deployment/myfastapiapp-deployment
-kubectl --context kind-argocd-postgres -n default \
+kubectl --context kind-argocd-postgres -n myfastapiapp \
   rollout status deployment/myfastapiapp-deployment --timeout=180s
 ```
 
@@ -110,9 +113,9 @@ After the shared [bootstrap procedure](../../docs/setup.md#4-validate-publish-an
 wait for this app to be **Synced / Healthy** and verify it:
 
 ```sh
-kubectl --context kind-argocd-postgres -n default \
+kubectl --context kind-argocd-postgres -n myfastapiapp \
   rollout status deployment/myfastapiapp-deployment --timeout=300s
-kubectl --context kind-argocd-postgres -n default get pvc,pods
+kubectl --context kind-argocd-postgres -n myfastapiapp get pvc,pods
 kubectl --context kind-argocd-postgres get pv myfastapiapp-postgres-pv
 curl -fsS http://myfastapiapp.localhost/health
 curl -fsS http://myfastapiapp.localhost/ready
@@ -125,7 +128,7 @@ Service -> FastAPI. Docker Desktop and the cluster must remain running.
 For a direct connection while diagnosing ingress:
 
 ```sh
-kubectl --context kind-argocd-postgres -n default \
+kubectl --context kind-argocd-postgres -n myfastapiapp \
   port-forward service/myfastapiapp-service 18000:80
 ```
 
@@ -154,10 +157,8 @@ if a failed release skipped image publication.
 ## Back up and release a database change
 
 1. Disable auto-sync in the live Application's Argo CD **App Details** and let
-   any active sync finish. Select `myfastapiapp-postgres-application`. The parent
-   registration controller preserves this live pause. Applying
-   `argocd/myfastapiapp.yaml` directly enables auto-sync again; use the root
-   bootstrap registration for routine setup.
+   any active sync finish. Select `staging-myfastapiapp`. The parent
+   ApplicationSet preserves this live pause through `ignoreApplicationDifferences`.
 2. During a quiet window, run the backup script and continue only if it succeeds:
 
    ```sh
@@ -165,7 +166,7 @@ if a failed release skipped image publication.
    ```
 
    The script explicitly targets context `kind-argocd-postgres`, namespace
-   `default`, and database `myfastapiapp`. It uses `pg_dump` and `pg_restore`
+   `myfastapiapp`, and database `myfastapiapp`. It uses `pg_dump` and `pg_restore`
    inside the existing Postgres Pod, so local PostgreSQL tools are unnecessary.
    It writes a custom-format archive under
    `$HOME/.local/share/myfastapiapp/backups` with mode `600`, outside Git. It
@@ -188,7 +189,7 @@ if a failed release skipped image publication.
 
    ```sh
    ./scripts/validate.sh
-   kubectl --context kind-argocd-postgres -n default \
+   kubectl --context kind-argocd-postgres -n myfastapiapp \
      apply --dry-run=server -k apps/myfastapiapp
    git diff --check
    ```
@@ -204,10 +205,10 @@ if a failed release skipped image publication.
 5. Check the Job logs, revision, rollout, and health:
 
    ```sh
-   kubectl --context kind-argocd-postgres -n default logs job/myfastapiapp-migrate
-   kubectl --context kind-argocd-postgres -n default \
+   kubectl --context kind-argocd-postgres -n myfastapiapp logs job/myfastapiapp-migrate
+   kubectl --context kind-argocd-postgres -n myfastapiapp \
      rollout status deployment/myfastapiapp-deployment --timeout=180s
-   kubectl --context kind-argocd-postgres -n default \
+   kubectl --context kind-argocd-postgres -n myfastapiapp \
      exec deployment/myfastapiapp-deployment -- \
      python -m alembic current --check-heads
    curl -fsS http://myfastapiapp.localhost/health
@@ -236,6 +237,8 @@ follow the shared [cluster setup](../../docs/setup.md), provision the same Secre
 and make the selected image available before bootstrapping staging again. To adopt
 the shared parent mount, follow the [storage upgrade](../../docs/repository-upgrade.md#shared-storage-at-the-next-rebuild)
 so the existing data appears at `/mnt/myfastapiapp-postgres` in the new node.
+The node uses label `staging.local/postgres-storage: "true"`, and the PV binds
+to the PVC in namespace `myfastapiapp`.
 
 Postgres reuses `pgdata`; `POSTGRES_PASSWORD` only initializes a new database.
 Changing that Secret does not rotate an existing database role's password. Keep

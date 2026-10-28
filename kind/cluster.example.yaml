@@ -9,12 +9,9 @@ nodes:
         protocol: TCP
     labels:
       staging.local/postgres-storage: "true"
-      # Compatibility with the existing myfastapiapp PV's node affinity.
-      myfastapiapp.local/postgres-storage: "true"
     extraMounts:
       # Replace with an absolute laptop directory outside this Git repository.
       # kind does not expand $HOME or ~ in YAML.
       # Create <app>-postgres/ inside this parent before deploying each database.
-      # /mnt preserves the existing PV path /mnt/myfastapiapp-postgres.
       - hostPath: /absolute/path/to/staging/postgres
         containerPath: /mnt

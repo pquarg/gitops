@@ -14,10 +14,11 @@ Run from any directory:
 From this repository root, use `./scripts/validate.sh`. It checks:
 
 - Bash syntax for every script under `scripts/` and `apps/`.
-- App directory names, every `apps/*/kustomization.yaml` deployment entry point,
-  and the presence of a matching `argocd/<app>.yaml` Application registration.
-- Rendered app resources, Argo CD registrations and the bootstrap Application
-  against schemas, with unknown kinds and unknown fields treated as failures.
+- App directory names and every `apps/*/kustomization.yaml` deployment entry point.
+  New apps are discovered automatically and need no individual registration file.
+- Rendered app resources, the ApplicationSet, shared registrations and the
+  bootstrap Application against schemas, with unknown kinds and fields treated
+  as failures.
 
 Built-in resources use Kubernetes `1.36.0` schemas by default. Set
 `KUBERNETES_VERSION` to another available schema version if targeting a different
@@ -31,7 +32,7 @@ Kustomization so its optional database and release image selection are included.
 For a cluster-aware check after provisioning its namespace, use:
 
 ```sh
-kubectl --context kind-argocd-postgres -n default \
+kubectl --context kind-argocd-postgres -n myfastapiapp \
   apply --dry-run=server -k apps/myfastapiapp
 ```
 

@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   printf 'Usage: %s [cluster] [backup-directory]\n' "${0##*/}"
   printf 'Defaults: cluster=argocd-postgres; backup-directory=$HOME/.local/share/myfastapiapp/backups\n'
-  printf 'Backs up the staging database myfastapiapp in namespace default using the Postgres Pod tools.\n'
+  printf 'Namespace defaults to myfastapiapp; override with NAMESPACE. Uses the Postgres Pod tools.\n'
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -26,10 +26,11 @@ fi
 cluster="${1:-argocd-postgres}"
 context="kind-${cluster}"
 backup_dir="${2:-$HOME/.local/share/myfastapiapp/backups}"
+namespace="${NAMESPACE:-myfastapiapp}"
 postgres_pod="myfastapiapp-postgres-statefulset-0"
-kube=(kubectl "--context=$context" --namespace=default)
+kube=(kubectl "--context=$context" "--namespace=$namespace")
 
-printf 'Backing up staging in context %s, namespace default, database myfastapiapp\n' "$context"
+printf 'Backing up staging in context %s, namespace %s, database myfastapiapp\n' "$context" "$namespace"
 "${kube[@]}" wait --for=condition=Ready "pod/$postgres_pod" --timeout=30s
 
 umask 077

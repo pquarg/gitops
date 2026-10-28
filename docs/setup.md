@@ -28,10 +28,9 @@ Postgres -> PVC -> local PV -> /mnt/myfastapiapp-postgres
                            -> laptop staging/postgres/myfastapiapp-postgres/
 ```
 
-Keep both supplied node labels: new PVs use `staging.local/postgres-storage`;
-the existing app's PV retains `myfastapiapp.local/postgres-storage`. Its existing
-PV path and binding remain unchanged. Local PVs are manually provisioned and
-retained. Their capacity declarations do not enforce filesystem quotas.
+Keep the supplied `staging.local/postgres-storage` node label; all app-owned
+local PVs use it to find the storage node. Local PVs are manually provisioned
+and retained. Their capacity declarations do not enforce filesystem quotas.
 See [kind mounts](https://kind.sigs.k8s.io/docs/user/configuration/#extra-mounts)
 and [Kubernetes local volumes](https://kubernetes.io/docs/concepts/storage/volumes/#local).
 
@@ -102,13 +101,16 @@ it cannot deploy unpushed local files. With the repository credential configured
 kubectl --context kind-argocd-postgres -n argocd get applications
 ```
 
-`bootstrap-kind.sh` applies only the root registration. The root Application
-manages the explicit app and Traefik registrations listed in
-`argocd/kustomization.yaml`. Each app Application applies its own resources. For
-`myfastapiapp`, it applies storage, waits for Postgres, runs
-Alembic migrations, and rolls out the API. There is no separate kubectl deployment
-sequence. Root **Synced** means registrations were applied; wait for the app's
-own **Synced / Healthy** status before testing it.
+`bootstrap-kind.sh` waits for the Argo CD server and ApplicationSet controller,
+then applies only the root registration. The root Application manages the
+ApplicationSet and Traefik registrations listed in `argocd/kustomization.yaml`.
+The ApplicationSet discovers every `apps/*` directory and creates an independent
+Application for each, including `staging-myfastapiapp` in namespace `myfastapiapp`.
+Each app Application applies its own resources. For `myfastapiapp`,
+it applies storage, waits for Postgres, runs Alembic migrations, and rolls out the
+API. There is no separate kubectl deployment sequence. Root **Synced** means
+registrations were applied; app discovery may still be running. Wait for the
+app's own **Synced / Healthy** status before testing it.
 
 Follow the app's verification procedure, starting with
 [myfastapiapp](../apps/myfastapiapp/README.md#verify-the-deployment). The HTTP route

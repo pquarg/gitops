@@ -8,13 +8,16 @@ Each app directory is a complete staging deployment; no environment overlays are
 
 | App | Namespace | Argo CD Application | URL |
 | --- | --- | --- | --- |
-| `myfastapiapp` | `default` | `myfastapiapp-postgres-application` | http://myfastapiapp.localhost/api/v1/docs/ |
+| `myfastapiapp` | `myfastapiapp` | `staging-myfastapiapp` | http://myfastapiapp.localhost/api/v1/docs/ |
 | New apps | App directory name | `staging-<app>` | Defined by the app's Ingress |
 
-The existing app retains its namespace and Application name to preserve its
-Postgres volume binding and resource ownership. Each new app gets its own namespace.
-One root Argo CD Application manages explicit app registrations and the shared
-Traefik registration. Each app syncs independently.
+Each app gets its own namespace. One root Argo CD Application manages the
+app-discovery ApplicationSet and the shared Traefik registration. The
+ApplicationSet discovers all apps under `apps/*`; each app syncs independently.
+
+Existing installations of `myfastapiapp` in `default` need the
+[one-time namespace migration](docs/repository-upgrade.md#move-myfastapiapp-out-of-default)
+before publishing these changes or enabling app discovery.
 
 ```text
 apps/
@@ -31,8 +34,7 @@ apps/
   <app>/                    # Each app has a root kustomization.yaml
 argocd/
   kustomization.yaml        # Registrations managed from Git by staging-bootstrap
-  myfastapiapp.yaml          # Existing app registration
-  <app>.yaml                # One explicit Application registration per new app
+  apps.yaml                 # Discovers every app under apps/*
   traefik.yaml              # Shared ingress controller
 bootstrap/staging.yaml      # Root Argo CD Application; apply once per cluster
 kind/
@@ -63,6 +65,8 @@ Argo CD manages app registration, database readiness, migrations and rollouts.
 kind must map `127.0.0.1:80` directly to Traefik's NodePort `30080`. Existing
 clusters without this mapping need a [planned rebuild](docs/repository-upgrade.md#shared-storage-at-the-next-rebuild).
 Apps supply their own Ingress through their Kustomization.
+Add a new app directory and provision any required credentials; no per-app Argo CD
+registration or central list edit is needed. See [adding apps](docs/adding-apps.md).
 
 New clusters mount a single laptop storage directory into `/mnt`. Each database
 owns a `<app>-postgres/` subdirectory and its own PV/PVC. Create that subdirectory

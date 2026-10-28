@@ -18,7 +18,7 @@ The Deployment references a Kubernetes Secret with these settings:
 | --- | --- |
 | Cluster context | `kind-argocd-postgres` |
 | Secret name | `registry-credentials` |
-| Namespace | The same namespace as the app; `default` in the example below |
+| Namespace | The same namespace as the app; `myfastapiapp` in the example below |
 | Secret type | `kubernetes.io/dockerconfigjson` |
 | Registry | `ghcr.io` |
 
@@ -37,8 +37,8 @@ Python 3 and kubectl available. Replace `YOUR_GITHUB_USERNAME` with the account
 that owns the PAT. The command prompts for the PAT without echoing it and pipes
 the generated Secret directly to kubectl, keeping the PAT out of command
 arguments, shell history, and saved files. Use the same command to update an
-existing `registry-credentials` Secret. The example targets `default` for
-`myfastapiapp`; replace the final `default` argument with another app's namespace.
+existing `registry-credentials` Secret. The example uses namespace `myfastapiapp`;
+replace the final `myfastapiapp` argument with another app's namespace.
 
 ```sh
 python3 -c '
@@ -62,14 +62,14 @@ secret = {
     "data": {".dockerconfigjson": base64.b64encode(config.encode()).decode()},
 }
 json.dump(secret, sys.stdout)
-' YOUR_GITHUB_USERNAME default |
+' YOUR_GITHUB_USERNAME myfastapiapp |
   kubectl --context kind-argocd-postgres apply -f -
 ```
 
 To confirm the Secret exists without displaying its credentials:
 
 ```sh
-kubectl --context kind-argocd-postgres -n default get secret registry-credentials \
+kubectl --context kind-argocd-postgres -n myfastapiapp get secret registry-credentials \
   -o 'custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type'
 ```
 
