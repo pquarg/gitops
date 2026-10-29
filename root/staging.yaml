@@ -22,6 +22,7 @@ spec:
         - /operation
   syncPolicy:
     automated:
+      enabled: true
       selfHeal: true
     syncOptions:
       - RespectIgnoreDifferences=true

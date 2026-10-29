@@ -15,7 +15,7 @@ while the old Application or its PVC still exists.
 The root Application is named `staging-root`. Existing clusters may still have
 `staging-bootstrap`. Kubernetes resource names cannot be changed in place;
 replace only the root registration and preserve its managed resources.
-This rename can be performed independently of the namespace migration below.
+Complete this rename before starting the namespace migration below.
 
 Pause the old root and wait for any active sync to finish in Argo CD:
 
@@ -49,6 +49,10 @@ This procedure requires downtime. It keeps the PostgreSQL 17 data directory at
 new binding, and replaces `myfastapiapp-postgres-application` with the generated
 `staging-myfastapiapp`. Keep the app image unchanged during this cutover.
 
+If the root is still named `staging-bootstrap`, complete
+[the root rename](#rename-the-root-application) first. The final bootstrap step
+requires that the old root registration has been removed.
+
 Run commands from this repository root in a shell with `set -euo pipefail`.
 Complete steps 1–5 before pushing this change to `main`: Argo CD reads GitHub
 and could otherwise attempt the cutover before storage is ready. Preserve the
@@ -57,8 +61,8 @@ original database password and laptop storage directory throughout.
 ### 1. Pause registration and application sync
 
 If `staging-root` already exists, disable its auto-sync and wait for any
-active root sync to finish. If the root has not been renamed yet, use
-`staging-bootstrap` instead:
+active root sync to finish. If no root Application is registered, skip this
+command:
 
 ```sh
 kubectl --context kind-argocd-postgres -n argocd patch application staging-root \
@@ -194,7 +198,8 @@ kubectl --context kind-argocd-postgres -n argocd scale \
 ./scripts/bootstrap-kind.sh
 ```
 
-The bootstrap command applies the root manifest, restoring root auto-sync. The
+The bootstrap command applies the root manifest, whose explicit
+`automated.enabled: true` restores root auto-sync after the maintenance pause. The
 ApplicationSet creates `staging-myfastapiapp`; it binds the retained directory
 to the new PVC, starts Postgres, runs migrations and deploys the API.
 Keep the existing ingress path for this namespace cutover. Clusters without the

@@ -121,6 +121,10 @@ curl -fsS http://myfastapiapp.localhost/health
 curl -fsS http://myfastapiapp.localhost/ready
 ```
 
+The readiness probe uses `/ready` to check database connectivity, with a
+three-second timeout for its two-second database check. Liveness uses `/health`
+to check that the API process is responding.
+
 Open http://myfastapiapp.localhost/api/v1/docs/, register a test account, and log
 in. The route is localhost port 80 -> kind node port 30080 -> Traefik -> the app
 Service -> FastAPI. Docker Desktop and the cluster must remain running.
@@ -189,10 +193,13 @@ if a failed release skipped image publication.
 
    ```sh
    ./scripts/validate.sh
-   kubectl --context kind-argocd-postgres -n myfastapiapp \
-     apply --dry-run=server -k apps/myfastapiapp
+   ./scripts/validate-server.sh myfastapiapp
    git diff --check
    ```
+
+   The [server validation script](../../docs/validation.md) checks ordinary
+   resource updates and hook creation separately. It preserves the retained
+   migration Job and logs while validating the new release image selection.
 
 4. Refresh Argo CD and run a full Application sync, with Force and Replace off.
    Resource-selective sync skips hooks. Sync waves apply storage at `-2`, wait

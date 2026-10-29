@@ -29,11 +29,23 @@ Kubernetes API access.
 
 CI runs the same script for pushes and pull requests. Render each app's root
 Kustomization so its optional database and release image selection are included.
-For a cluster-aware check after provisioning its namespace, use:
+For a cluster-aware check with Python 3 available and the app's namespace
+already provisioned, use:
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp \
-  apply --dry-run=server -k apps/myfastapiapp
+./scripts/validate-server.sh myfastapiapp
+```
+
+This renders the app's complete Kustomization, dry-runs updates to ordinary
+resources, and dry-runs creation of Argo CD hooks under generated names. A
+retained migration Job has an immutable Pod template; applying a new image to
+that existing Job would fail even though Argo CD replaces the hook during sync.
+The script preserves the existing Job and logs and does not run migrations or
+persist resources. It requires Kubernetes API access. To target another kind
+cluster, pass its name as the second argument:
+
+```sh
+./scripts/validate-server.sh myfastapiapp another-cluster
 ```
 
 Schema validation cannot prove image availability, Secret presence, database

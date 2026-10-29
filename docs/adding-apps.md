@@ -98,9 +98,12 @@ create it beforehand if using the server-side validation command below.
 ```sh
 git check-ignore apps/billing-api/app-secrets.yaml
 ./scripts/validate.sh
-kubectl --context kind-argocd-postgres -n billing-api \
-  apply --dry-run=server -k apps/billing-api
+./scripts/validate-server.sh billing-api
 ```
+
+The server validation script requires Python 3. It checks resource updates and
+new hook creation separately, so retained migration Jobs do not block image
+updates. See [validation](validation.md).
 
 Review, commit and push the app directory. CI renders every app's root
 Kustomization and the shared registrations. Once the ApplicationSet discovers
