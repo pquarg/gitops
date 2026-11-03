@@ -3,7 +3,8 @@
 Every app now follows the same convention: `apps/<app>` is discovered by the
 ApplicationSet, Application `staging-<app>` deploys into namespace `<app>`, and
 local database PVs use node label `staging.local/postgres-storage: "true"`.
-The root Application manages only the ApplicationSet and shared Traefik registration.
+The root Application manages only the app-discovery ApplicationSet. Shared
+Traefik and cluster setup belong to the sibling `infra-local` repository.
 
 Fresh clusters can follow [setup](setup.md). An existing `myfastapiapp` in
 `default` needs the one-time cutover below. Editing Git does not move its PVC,
@@ -204,7 +205,7 @@ ApplicationSet creates `staging-myfastapiapp`; it binds the retained directory
 to the new PVC, starts Postgres, runs migrations and deploys the API.
 Keep the existing ingress path for this namespace cutover. Clusters without the
 direct localhost port mapping can adopt it during the planned rebuild below;
-`setup-ingress-kind.sh` requires that mapping.
+`infra-local/scripts/setup-ingress-kind.sh` requires that mapping.
 
 Wait for **Synced / Healthy**, then follow the app's
 [verification instructions](../apps/myfastapiapp/README.md#verify-the-deployment).
@@ -221,7 +222,7 @@ reverting Git alone does not move storage back.
 
 ## Shared storage at the next rebuild
 
-The kind example mounts one laptop parent into `/mnt`. Each app owns a
+The `infra-local` kind example mounts one laptop parent into `/mnt`. Each app owns a
 `<app>-postgres/` subdirectory. An older cluster with an app-specific mount can
 complete the namespace migration above without changing that mount.
 
@@ -232,7 +233,8 @@ During a later planned rebuild:
 2. With Postgres stopped, copy its complete data directory, including `pgdata`
    and permissions, into `myfastapiapp-postgres/` under a shared laptop parent
    such as `$HOME/.local/share/staging/postgres`. Keep the original copy.
-3. Copy `kind/cluster.example.yaml` to the ignored `kind/cluster.local.yaml`.
+3. In `infra-local`, copy `kind/cluster.example.yaml` to the ignored
+   `kind/cluster.local.yaml`.
    Set the absolute parent `hostPath`, keep `/mnt`, the shared storage label and
    the direct `127.0.0.1:80` to `30080` port mapping. Editing YAML does not change
    an existing cluster. Free port 80, including any old ingress container.
@@ -242,3 +244,62 @@ During a later planned rebuild:
 Afterwards, each new database needs only its subdirectory and app-owned PV/PVC;
 the kind mount stays the same. These repository changes do not rebuild the
 cluster or move data automatically.
+
+## Split local infrastructure from app deployment
+
+This split keeps the cluster name, storage paths, chart versions and app
+resources unchanged. It moves kind configuration, shared Traefik registration
+and ingress verification to the independent sibling `infra-local` repository.
+App discovery and all app/database manifests remain here. No live changes are
+made by moving the files; do not delete the cluster or its data to adopt this.
+
+For an existing cluster, first finish any older root rename or namespace
+migration above if still needed. Complete the following during a quiet window:
+
+1. Ensure the sibling `infra-local` checkout exists. The previous ignored
+   `kind/postgres-config.local.yaml` moves there too, if present. Keep its
+   original host paths. The new platform scripts default to
+   `kind/cluster.local.yaml`; no config is needed just to transfer ownership.
+2. In Argo CD, pause `staging-root` auto-sync and let its active sync finish.
+   Leave the app's deployment unchanged. Pause any other parent that still
+   manages `Application/traefik`.
+3. Connect `git@github.com:pquarg/deploy-local.git` in Argo CD before switching
+   sources. The root and ApplicationSet now use that URL, matching this repo's
+   actual remote, rather than the old `deploy.git` URL. If a legacy
+   `deploy.git` checkout is still active, retire its root registration; there
+   must be only one parent managing these registrations. Keep the old Git
+   credential until all Applications have switched successfully.
+4. Validate both repositories, review and publish the `deploy-local` changes
+   to `main` while the root is paused. Preserve any app maintenance pauses.
+5. Transfer the existing Traefik Application without deleting it or its Helm
+   resources. Run from `deploy-local`:
+
+   ```sh
+   kubectl --context kind-argocd-postgres -n argocd annotate application traefik \
+     argocd.argoproj.io/tracking-id-
+   kubectl --context kind-argocd-postgres -n argocd label application traefik \
+     app.kubernetes.io/instance-
+   kubectl --context kind-argocd-postgres apply -k ../infra-local/argocd
+   ../infra-local/scripts/setup-ingress-kind.sh
+   ```
+
+   The metadata removals clear the old parent's annotation/label tracking.
+   Removing an absent annotation or label is harmless. The Traefik Application
+   retains its name and chart specification; it continues managing the same
+   Helm resources. Its registration is now applied from `infra-local` on
+   platform changes. Do not delete or cascade-prune the Application.
+6. With the deployment commit available on `main`, run
+   `./scripts/bootstrap-kind.sh`. This updates `staging-root`'s source and
+   resumes its auto-sync. The new app-discovery template points generated apps
+   at `deploy-local.git`; the root no longer manages Traefik. Automatic root
+   pruning remains disabled throughout the transfer.
+7. Verify root and app Applications are **Synced / Healthy**, Traefik is ready,
+   and the app health/readiness endpoints and existing data work. If the root
+   still lists Traefik, check its tracking metadata and refresh the root after
+   confirming its Git source has the split commit.
+
+For a fresh cluster, use [infra-local's setup](../../infra-local/README.md)
+followed by [deployment setup](setup.md). If the old cluster lacks the required
+port mapping or shared storage mount, plan the separate
+[platform rebuild](../../infra-local/docs/rebuild.md) after backing up; this
+ownership transfer cannot change existing container mounts or published ports.

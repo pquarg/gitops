@@ -50,7 +50,7 @@ database, migration and rollout in the same Application so sync waves can enforc
 ordering. Database schema migrations belong in the app image. Keep its backup
 script and database runbooks under the app directory.
 
-On clusters created with `kind/cluster.example.yaml`, the laptop storage parent
+On clusters created with `infra-local/kind/cluster.example.yaml`, the laptop storage parent
 is mounted once at `/mnt`. Before deploying a database, create `<app>-postgres/`
 inside that laptop parent. For example, `billing-api-postgres/` becomes
 `/mnt/billing-api-postgres` in the kind node. Its PV should use that path and
@@ -106,7 +106,7 @@ new hook creation separately, so retained migration Jobs do not block image
 updates. See [validation](validation.md).
 
 Review, commit and push the app directory. CI renders every app's root
-Kustomization and the shared registrations. Once the ApplicationSet discovers
+Kustomization and the app-discovery registration. Once the ApplicationSet discovers
 the directory, check the `staging-billing-api` Application's sync/health and test
 its hostname. Keep its release/backup runbook in its own directory.
 

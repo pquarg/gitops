@@ -8,7 +8,7 @@ exist in every namespace that consumes them. See [adding apps](adding-apps.md).
 Database credentials and connection settings belong to the app. Start with
 [myfastapiapp credentials](../apps/myfastapiapp/README.md#provision-credentials).
 The shared Git credential used by Argo CD is configured during
-[cluster setup](setup.md#2-install-argo-cd-before-deploying-apps).
+[deployment Git connection](setup.md#2-connect-the-deployment-git-repository).
 
 ## Registry authentication
 

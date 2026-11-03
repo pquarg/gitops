@@ -1,23 +1,22 @@
-# Staging deployments
+# Local app deployments
 
-This repository deploys apps to the local kind cluster `argocd-postgres` using
-Argo CD and Kustomize. Application code and Dockerfiles live in separate app
-repositories. One shared Traefik controller routes requests by hostname.
-Production deployment configuration belongs in a separate parallel repository.
-Each app directory is a complete staging deployment; no environment overlays are needed.
+Deploy apps to the local kind cluster `argocd-postgres` using Argo CD and
+Kustomize. Application code and Dockerfiles live in separate app repositories.
+The sibling [infra-local repository](../infra-local/README.md) creates the
+cluster and owns Argo CD installation, host storage/port mappings and shared
+Traefik. This repository owns app discovery, app manifests and releases.
+Cloud deployments have their own parallel infrastructure/deployment repositories.
 
 | App | Namespace | Argo CD Application | URL |
 | --- | --- | --- | --- |
 | `myfastapiapp` | `myfastapiapp` | `staging-myfastapiapp` | http://myfastapiapp.localhost/api/v1/docs/ |
 | New apps | App directory name | `staging-<app>` | Defined by the app's Ingress |
 
-Each app gets its own namespace. One root Argo CD Application manages the
-app-discovery ApplicationSet and the shared Traefik registration. The
-ApplicationSet discovers all apps under `apps/*`; each app syncs independently.
-
-Existing installations of `myfastapiapp` in `default` need the
-[one-time namespace migration](docs/repository-upgrade.md#move-myfastapiapp-out-of-default)
-before publishing these changes or enabling app discovery.
+Each app directory is a complete local staging deployment; no environment
+overlays are needed. One root Argo CD Application manages the app-discovery
+ApplicationSet. It discovers `apps/*`; each app syncs independently into its
+own namespace. Apps own their database workloads, storage claims, credentials,
+migrations, backups and recovery procedures.
 
 ```text
 apps/
@@ -28,58 +27,68 @@ apps/
     ingress.yaml
     migration-job.yaml
     postgres/               # App-owned database, retained storage, backup and reset
-    kustomization.yaml      # Complete staging deployment and release image
+    kustomization.yaml      # Complete deployment and release image
     app-secrets.example.yaml
-    README.md               # App setup, releases, verification and recovery
-  <app>/                    # Each app has a root kustomization.yaml
+    README.md
 argocd/
-  kustomization.yaml        # Registrations managed from Git by staging-root
-  apps.yaml                 # Discovers every app under apps/*
-  traefik.yaml              # Shared ingress controller
-root/staging.yaml           # Root Argo CD Application; apply once per cluster
-kind/
-  cluster.example.yaml      # One parent storage mount and direct localhost mapping
-scripts/
+  kustomization.yaml        # App registrations managed by staging-root
+  apps.yaml                # Discovers every app under apps/*
+root/staging.yaml          # Root Argo CD Application; apply once per cluster
+scripts/                   # Register apps and validate deployments
 docs/
 ```
 
-Commands run from this repository root. Use
-`kubectl --context kind-argocd-postgres` to target staging explicitly.
+## Set up and deploy
 
-- [Fresh cluster setup](docs/setup.md)
+1. Prepare the platform using [infra-local](../infra-local/README.md). It
+   supplies the cluster, Argo CD and shared ingress before app registration.
+2. Follow [deployment setup](docs/setup.md) to connect the deployment Git
+   credential, provision each app's Secrets and make its selected image available.
+3. Validate, review and publish these manifests to `main`, then register apps:
+
+   ```sh
+   ./scripts/validate.sh
+   git diff --check
+   ./scripts/bootstrap-kind.sh
+   ```
+
+Argo CD reads `git@github.com:pquarg/deploy-local.git`; it cannot deploy unpushed
+local changes. App sync is automatic and includes database migrations, so
+prepare credentials and retained data before registration. The bootstrap script
+requires the platform and only registers this repository's root Application.
+Use `kubectl --context kind-argocd-postgres` to target local staging explicitly.
+
+For existing clusters, follow [the infrastructure ownership transfer](docs/repository-upgrade.md#split-local-infrastructure-from-app-deployment).
+Older installations of `myfastapiapp` in `default` also require the
+[one-time namespace migration](docs/repository-upgrade.md#move-myfastapiapp-out-of-default).
+Moving files between repositories does not rebuild clusters or move data.
+
+## Releases and recovery
+
+Update `images[].newTag` in an app's root Kustomization and follow its release
+runbook. Database changes require the app's controlled backup and sync procedure.
+Manifest-only changes need a deployment-repository commit; platform changes
+belong in `infra-local`.
+
+- [Set up deployment](docs/setup.md)
 - [Upgrade an existing checkout and cluster](docs/repository-upgrade.md)
 - [Add an app](docs/adding-apps.md)
-- [Configure credentials](docs/credentials.md)
-- [Set up, release, back up and recover myfastapiapp](apps/myfastapiapp/README.md)
+- [Configure app credentials](docs/credentials.md)
+- [Release, back up and recover myfastapiapp](apps/myfastapiapp/README.md)
 - [Reset disposable myfastapiapp data](apps/myfastapiapp/postgres/reset.md)
-- [Run local and CI validation](docs/validation.md)
+- [Local and CI validation](docs/validation.md)
+- [Rebuild the platform](../infra-local/docs/rebuild.md)
 
-After installing Argo CD, connecting its Git credential, and pushing the manifests:
+Each database uses `<app>-postgres/` under the laptop storage parent mounted at
+`/mnt`. Create that subdirectory before deploying a new database; apps require no
+additional kind mount. Preserve the original data directory and passwords when
+rebuilding, and restore Secrets before registering app discovery.
 
-```sh
-./scripts/bootstrap-kind.sh
-./scripts/setup-ingress-kind.sh
-```
-
-Argo CD manages app registration, database readiness, migrations and rollouts.
-kind must map `127.0.0.1:80` directly to Traefik's NodePort `30080`. Existing
-clusters without this mapping need a [planned rebuild](docs/repository-upgrade.md#shared-storage-at-the-next-rebuild).
-Apps supply their own Ingress through their Kustomization.
-Add a new app directory and provision any required credentials; no per-app Argo CD
-registration or central list edit is needed. See [adding apps](docs/adding-apps.md).
-
-New clusters mount a single laptop storage directory into `/mnt`. Each database
-owns a `<app>-postgres/` subdirectory and its own PV/PVC. Create that subdirectory
-before deploying a new database; no extra kind mount is required. Existing clusters
-keep their current mounts until a planned rebuild.
-
-To open the Argo CD UI, keep this running:
+To open the Argo CD UI, keep this running and open https://localhost:8080:
 
 ```sh
 kubectl --context kind-argocd-postgres -n argocd \
   port-forward service/argocd-server 8080:443
 ```
 
-Open https://localhost:8080. Initial sign-in instructions are in the setup guide.
-For app releases, edit `images[].newTag` in the app's root Kustomization and follow
-its release runbook. Database changes require the controlled backup and sync procedure.
+Initial sign-in and platform maintenance instructions are in `infra-local`.

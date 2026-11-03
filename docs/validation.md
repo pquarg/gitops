@@ -8,7 +8,7 @@ with `brew install kubeconform`; pinned binaries are available on its release pa
 Run from any directory:
 
 ```sh
-/path/to/deploy/scripts/validate.sh
+/path/to/deploy-local/scripts/validate.sh
 ```
 
 From this repository root, use `./scripts/validate.sh`. It checks:
@@ -16,7 +16,7 @@ From this repository root, use `./scripts/validate.sh`. It checks:
 - Bash syntax for every script under `scripts/` and `apps/`.
 - App directory names and every `apps/*/kustomization.yaml` deployment entry point.
   New apps are discovered automatically and need no individual registration file.
-- Rendered app resources, the ApplicationSet, shared registrations and the
+- Rendered app resources, the ApplicationSet and the
   root Application against schemas, with unknown kinds and fields treated
   as failures.
 
@@ -50,3 +50,7 @@ cluster, pass its name as the second argument:
 
 Schema validation cannot prove image availability, Secret presence, database
 compatibility or runtime health. Use the app's release verification for those.
+
+Cluster creation, the Argo CD installation and shared Traefik are validated
+separately by `infra-local/scripts/validate.sh`. See
+[infra-local](../../infra-local/README.md#validate-and-update).

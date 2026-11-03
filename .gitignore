@@ -4,4 +4,3 @@
 *.log
 /apps/**/*-secrets.yaml
 /apps/**/secrets.yaml
-/kind/**/*.local.yaml

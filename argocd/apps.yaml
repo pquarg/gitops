@@ -8,7 +8,7 @@ spec:
   goTemplateOptions: ["missingkey=error"]
   generators:
     - git:
-        repoURL: git@github.com:pquarg/deploy.git
+        repoURL: git@github.com:pquarg/deploy-local.git
         revision: main
         directories:
           - path: apps/*
@@ -27,7 +27,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: git@github.com:pquarg/deploy.git
+        repoURL: git@github.com:pquarg/deploy-local.git
         targetRevision: main
         path: '{{.path.path}}'
       destination:
