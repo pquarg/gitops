@@ -303,3 +303,14 @@ followed by [deployment setup](setup.md). If the old cluster lacks the required
 port mapping or shared storage mount, plan the separate
 [platform rebuild](../../infra-local/docs/rebuild.md) after backing up; this
 ownership transfer cannot change existing container mounts or published ports.
+
+## Consolidate platform Helm ownership
+
+The earlier repository-split steps above describe the intermediate Traefik
+Application ownership. The current platform now uses one Terraform state for
+both controllers. After finishing any earlier app/namespace/storage transfer,
+follow [infra-local's adoption guide](../../infra-local/docs/terraform.md#adopt-an-existing-installation)
+to detach the Traefik registration without cascading deletion and adopt its
+running objects into Helm. Do not re-register a Traefik Application after that
+migration. Cluster/data/credentials remain in place. The common deployment
+entry point is `scripts/bootstrap.sh --context kind-argocd-postgres`.

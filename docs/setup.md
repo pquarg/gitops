@@ -8,12 +8,12 @@ follow [the upgrade guide](repository-upgrade.md) before publishing the split.
 
 Follow [infra-local's README](../../infra-local/README.md) to configure the kind
 storage parent and localhost port mapping, create the cluster, install Argo CD
-and register shared Traefik. Its scripts run from that separate repository:
+and install shared Traefik through Terraform Helm. Its scripts run from that separate repository:
 
 ```sh
 cd ../infra-local
 ./scripts/create-cluster.sh
-./scripts/bootstrap-kind.sh
+./scripts/bootstrap.sh --context kind-argocd-postgres
 cd ../deploy-local
 ```
 
@@ -72,11 +72,11 @@ it cannot deploy files that exist only in this checkout. With the platform and
 credentials ready:
 
 ```sh
-./scripts/bootstrap-kind.sh
+./scripts/bootstrap.sh --context kind-argocd-postgres
 kubectl --context kind-argocd-postgres -n argocd get applications
 ```
 
-The script checks the Argo CD controllers and shared ingress, then applies only
+The script validates first, checks the Argo CD controllers and shared ingress, then applies only
 `staging-root`. The root manages the ApplicationSet in `argocd/kustomization.yaml`.
 It discovers every `apps/*` directory and creates an independent Application,
 including `staging-myfastapiapp` in namespace `myfastapiapp`. Each app applies
@@ -96,3 +96,8 @@ platform replacement. Recreate app Secrets with their original credentials,
 preserve the laptop storage parent and use a compatible PostgreSQL major
 version. Follow each app's recovery runbook before resuming traffic. App
 database releases and recovery remain owned by this repository.
+
+The common entry point also accepts `--kubeconfig /absolute/path`. It requires an
+explicit context and uses the same file/context for every Kubernetes command.
+`scripts/bootstrap-kind.sh [cluster]` remains a compatibility wrapper. Shared
+Traefik is a Terraform Helm release; Argo CD reconciles application resources.

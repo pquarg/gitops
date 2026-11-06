@@ -49,7 +49,7 @@ docs/
    ```sh
    ./scripts/validate.sh
    git diff --check
-   ./scripts/bootstrap-kind.sh
+   ./scripts/bootstrap.sh --context kind-argocd-postgres
    ```
 
 Argo CD reads `git@github.com:pquarg/deploy-local.git`; it cannot deploy unpushed
@@ -92,3 +92,8 @@ kubectl --context kind-argocd-postgres -n argocd \
 ```
 
 Initial sign-in and platform maintenance instructions are in `infra-local`.
+
+The common entry point also accepts `--kubeconfig /absolute/path`. It requires an
+explicit context and uses the same file/context for every Kubernetes command.
+`scripts/bootstrap-kind.sh [cluster]` remains a compatibility wrapper. Shared
+Traefik is a Terraform Helm release; Argo CD reconciles application resources.

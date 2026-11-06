@@ -3,6 +3,7 @@ set -euo pipefail
 
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_root"
+bash tests/bootstrap.sh
 for required_command in kubectl kubeconform; do
   if ! command -v "$required_command" > /dev/null; then
     printf 'Error: %s is required; see docs/validation.md.\n' "$required_command" >&2
