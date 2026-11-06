@@ -111,3 +111,51 @@ Secrets.
 Keep reset SQL out of migration Jobs and revision scripts so later syncs preserve
 data. Use the app image's Alembic commands to discover revisions; update this
 runbook when the deployment or reset procedure changes.
+
+## Discard the database after cluster teardown
+
+Use this only when deliberately destroying the database as part of
+[a full platform teardown and rebuild](../../../../infra-local/README.md#method-2-destroy-the-database).
+Unlike the schema reset above, this removes the PostgreSQL data files, including
+roles and passwords stored in that database instance. All app accounts, sessions
+and records are discarded. Backup archives stored elsewhere are kept.
+
+1. Complete [platform preparation and clean shutdown](../../../../infra-local/docs/rebuild.md#prepare-for-either-method),
+   retaining a verified backup if you may need the data later. Delete the
+   `argocd-postgres` cluster as documented there. Confirm no other PostgreSQL
+   server or container is using this data directory. Do not remove files while
+   PostgreSQL is running.
+2. Read the absolute `hostPath` mounted at `/mnt` in
+   `infra-local/kind/cluster.local.yaml`. The PV uses
+   `/mnt/myfastapiapp-postgres` and PostgreSQL stores its files in `pgdata`, so
+   the directory to remove on the laptop is
+   `<hostPath>/myfastapiapp-postgres/pgdata`.
+
+   Set the variable below to that exact absolute laptop path, then inspect it
+   before continuing. The example is a placeholder, not a path to copy unchanged:
+
+   ```sh
+   postgres_data_dir='/absolute/storage/parent/myfastapiapp-postgres/pgdata'
+   ls -ld -- "$postgres_data_dir"
+   ```
+
+   If the old cluster used a different mount, identify its actual data path
+   before deleting anything. Do not select the shared parent or another app's
+   directory.
+3. After confirming the path and the intention to discard it, remove only that
+   `pgdata` directory:
+
+   ```sh
+   rm -rf -- "$postgres_data_dir"
+   ```
+
+   If ownership prevents removal, use an account permitted to remove this exact
+   directory. Do not broaden the deletion to the shared parent. Keep the empty
+   `myfastapiapp-postgres` directory for the PV; do not delete Terraform state,
+   local kind configuration or unrelated app directories.
+4. Return to [platform startup](../../../../infra-local/README.md#spin-up-after-either-method).
+   Before registering apps, provision matching database/app Secrets and registry
+   credentials, and make the selected image available. New database passwords
+   are allowed because PostgreSQL will initialize empty storage. Argo CD runs
+   the migration Job to create the schema. Verify health, readiness, new-account
+   registration and login; old accounts will no longer exist.

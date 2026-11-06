@@ -13,7 +13,7 @@ and install shared Traefik through Terraform Helm. Its scripts run from that sep
 ```sh
 cd ../infra-local
 ./scripts/create-cluster.sh
-./scripts/bootstrap.sh --context kind-argocd-postgres
+./scripts/bootstrap-kind.sh
 cd ../deploy-local
 ```
 
@@ -91,11 +91,13 @@ app Service. Docker Desktop and the cluster must remain running.
 
 ## Recovery
 
-Use [infra-local's rebuild procedure](../../infra-local/docs/rebuild.md) for
-platform replacement. Recreate app Secrets with their original credentials,
-preserve the laptop storage parent and use a compatible PostgreSQL major
-version. Follow each app's recovery runbook before resuming traffic. App
-database releases and recovery remain owned by this repository.
+For platform replacement, choose [keep the database](../../infra-local/README.md#method-1-keep-the-database)
+or [destroy the database](../../infra-local/README.md#method-2-destroy-the-database).
+Both methods recreate Kubernetes objects and Secrets. Retained data needs the
+original database credentials, storage mount and a compatible PostgreSQL major
+version; fresh data may use new matching credentials. Follow each app's recovery
+or removal runbook before resuming traffic. App database releases and recovery
+remain owned by this repository.
 
 The common entry point also accepts `--kubeconfig /absolute/path`. It requires an
 explicit context and uses the same file/context for every Kubernetes command.

@@ -77,7 +77,8 @@ belong in `infra-local`.
 - [Release, back up and recover myfastapiapp](apps/myfastapiapp/README.md)
 - [Reset disposable myfastapiapp data](apps/myfastapiapp/postgres/reset.md)
 - [Local and CI validation](docs/validation.md)
-- [Rebuild the platform](../infra-local/docs/rebuild.md)
+- [Tear down and rebuild, keeping the database](../infra-local/README.md#method-1-keep-the-database)
+- [Tear down and rebuild, destroying the database](../infra-local/README.md#method-2-destroy-the-database)
 
 Each database uses `<app>-postgres/` under the laptop storage parent mounted at
 `/mnt`. Create that subdirectory before deploying a new database; apps require no
