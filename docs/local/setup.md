@@ -9,6 +9,12 @@ Existing Kubernetes databases must also follow the [database cutover](database-m
 before publishing the new local overlay. The current app sync connects to an
 already provisioned database; it does not create PostgreSQL or mount its storage.
 
+For the complete fresh/local Compose workflow, the sibling infrastructure checkout
+provides `../infra-local/scripts/setup-local.sh`. It runs the steps below in order,
+including credentials, a local image build/load and deployment verification. See
+[the setup entry point](../../../infra-local/docs/setup-local.md). The individual
+commands below remain useful for manual setup and recovery.
+
 ## 1. Prepare the platform with infra-local
 
 Follow [infra-local's README](../../../infra-local/README.md) to provision separate
