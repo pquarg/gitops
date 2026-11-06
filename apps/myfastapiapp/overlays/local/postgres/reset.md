@@ -42,7 +42,7 @@ Secrets.
 
 1. Make the intended app image available using the
    [image preparation instructions](../README.md#make-the-app-image-available).
-   Use the release selected in `apps/myfastapiapp/kustomization.yaml`; its image
+   Use the release selected in `apps/myfastapiapp/overlays/local/kustomization.yaml`; its image
    tag applies to both the API Deployment and migration Job. No historical
    release tag needs to be copied from this runbook.
 
@@ -115,12 +115,12 @@ runbook when the deployment or reset procedure changes.
 ## Discard the database after cluster teardown
 
 Use this only when deliberately destroying the database as part of
-[a full platform teardown and rebuild](../../../../infra-local/README.md#method-2-destroy-the-database).
+[a full platform teardown and rebuild](../../../../../../infra-local/README.md#method-2-destroy-the-database).
 Unlike the schema reset above, this removes the PostgreSQL data files, including
 roles and passwords stored in that database instance. All app accounts, sessions
 and records are discarded. Backup archives stored elsewhere are kept.
 
-1. Complete [platform preparation and clean shutdown](../../../../infra-local/docs/rebuild.md#prepare-for-either-method),
+1. Complete [platform preparation and clean shutdown](../../../../../../infra-local/docs/rebuild.md#prepare-for-either-method),
    retaining a verified backup if you may need the data later. Delete the
    `argocd-postgres` cluster as documented there. Confirm no other PostgreSQL
    server or container is using this data directory. Do not remove files while
@@ -153,7 +153,7 @@ and records are discarded. Backup archives stored elsewhere are kept.
    directory. Do not broaden the deletion to the shared parent. Keep the empty
    `myfastapiapp-postgres` directory for the PV; do not delete Terraform state,
    local kind configuration or unrelated app directories.
-4. Return to [platform startup](../../../../infra-local/README.md#spin-up-after-either-method).
+4. Return to [platform startup](../../../../../../infra-local/README.md#spin-up-after-either-method).
    Before registering apps, provision matching database/app Secrets and registry
    credentials, and make the selected image available. New database passwords
    are allowed because PostgreSQL will initialize empty storage. Argo CD runs

@@ -1,17 +1,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: staging-apps
+  name: aws-apps
   namespace: argocd
 spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
     - git:
-        repoURL: git@github.com:pquarg/deploy-local.git
+        repoURL: git@github.com:pquarg/gitops.git
         revision: main
         directories:
-          - path: apps/*
+          - path: apps/*/overlays/aws
   ignoreApplicationDifferences:
     - jsonPointers:
         # Allow database maintenance to pause an app's automatic sync.
@@ -20,21 +20,20 @@ spec:
     preserveResourcesOnDeletion: true
   template:
     metadata:
-      name: 'staging-{{.path.basename}}'
+      name: 'aws-{{index .path.segments 1}}'
       namespace: argocd
       labels:
-        environment: staging
+        environment: aws
     spec:
       project: default
       source:
-        repoURL: git@github.com:pquarg/deploy-local.git
+        repoURL: git@github.com:pquarg/gitops.git
         targetRevision: main
         path: '{{.path.path}}'
       destination:
         server: https://kubernetes.default.svc
-        namespace: '{{.path.basename}}'
+        namespace: '{{index .path.segments 1}}'
       syncPolicy:
-        automated:
-          selfHeal: true
+        # Sync apps manually at first, including the database migration hook.
         syncOptions:
           - CreateNamespace=true

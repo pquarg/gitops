@@ -1,61 +1,93 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
+usage() {
+  printf 'Usage: %s [--environment local|aws] [--ready]\n' "${0##*/}"
+  printf 'Validate both environments by default; --ready also rejects deployment placeholders.\n'
+}
+environment=""
+ready=false
+while (( $# )); do
+  case "$1" in
+    --environment)
+      if (( $# < 2 )); then usage >&2; exit 1; fi
+      case "$2" in local|aws) environment="$2" ;; *) usage >&2; exit 1 ;; esac
+      shift 2 ;;
+    --ready) ready=true; shift ;;
+    --help|-h) usage; exit 0 ;;
+    *) usage >&2; exit 1 ;;
+  esac
+done
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_root"
-bash tests/bootstrap.sh
-for required_command in kubectl kubeconform; do
+for required_command in kubectl kubeconform python3; do
   if ! command -v "$required_command" > /dev/null; then
-    printf 'Error: %s is required; see docs/validation.md.\n' "$required_command" >&2
-    exit 1
+    printf 'Error: %s is required; see docs/validation.md.\n' "$required_command" >&2; exit 1
   fi
 done
-
-while IFS= read -r -d '' script; do
-  bash -n "$script"
-done < <(find scripts apps -type f -name '*.sh' -print0)
-
+bash tests/bootstrap.sh
+python3 -m unittest discover -s scripts/tests
+python3 -m unittest discover -s tests
+while IFS= read -r -d '' script; do bash -n "$script"; done < <(find scripts apps tests -type f -name '*.sh' -print0)
 render_dir="$(mktemp -d)"
 trap 'rm -rf -- "$render_dir"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 shopt -s nullglob
 app_directories=(apps/*/)
-if (( ${#app_directories[@]} == 0 )); then
-  printf 'Error: no app deployment entry points found under apps/.\n' >&2
-  exit 1
-fi
-
+if (( ${#app_directories[@]} == 0 )); then printf 'Error: no apps under apps/.\n' >&2; exit 1; fi
+# Validate shared app names before deriving namespace and Application names.
 for app_directory in "${app_directories[@]}"; do
-  app_directory="${app_directory%/}"
-  app_name="${app_directory#apps/}"
-  # Apps use the directory name for their namespace and Application naming.
+  app_name="${app_directory#apps/}"; app_name="${app_name%/}"
   if (( ${#app_name} > 63 )) || [[ ! "$app_name" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
-    printf 'Error: app directory %s must be a DNS label of at most 63 characters.\n' "$app_name" >&2
-    exit 1
+    printf 'Error: app name %s must be a DNS label of at most 63 characters.\n' "$app_name" >&2; exit 1
   fi
   case "$app_name" in
-    argocd|traefik|default|bootstrap|root|kube-*)
-      printf 'Error: app directory %s conflicts with a reserved namespace or registration.\n' "$app_name" >&2
-      exit 1
-      ;;
+    argocd|traefik|default|bootstrap|root|kube-*) printf 'Error: reserved app name %s.\n' "$app_name" >&2; exit 1 ;;
   esac
-  if [[ ! -f "$app_directory/kustomization.yaml" ]]; then
-    printf 'Error: %s needs a root kustomization.yaml for deployment.\n' "$app_directory" >&2
-    exit 1
+  if [[ ! -f "$app_directory/base/kustomization.yaml" ]]; then
+    printf 'Error: %s needs base/kustomization.yaml.\n' "$app_directory" >&2; exit 1
   fi
-  printf 'Rendering %s\n' "$app_directory"
-  kubectl kustomize "$app_directory" > "$render_dir/app-${app_name}.yaml"
+  overlays=("$app_directory"/overlays/*/)
+  if (( ${#overlays[@]} == 0 )); then printf 'Error: %s has no environment overlays.\n' "$app_directory" >&2; exit 1; fi
+  for overlay in "${overlays[@]}"; do
+    overlay_name="${overlay%/}"; overlay_name="${overlay_name##*/}"
+    case "$overlay_name" in local|aws) ;; *) printf 'Error: unknown overlay %s.\n' "$overlay" >&2; exit 1 ;; esac
+    if [[ ! -f "$overlay/kustomization.yaml" ]]; then printf 'Error: %s needs kustomization.yaml.\n' "$overlay" >&2; exit 1; fi
+  done
 done
-kubectl kustomize argocd > "$render_dir/registrations.yaml"
-cp root/staging.yaml "$render_dir/root.yaml"
-
-# Fail on unknown kinds as well as invalid resources. Add a schema source when
-# introducing CRDs; never silently skip resources whose schemas are missing.
+environments=(local aws)
+if [[ -n "$environment" ]]; then environments=("$environment"); fi
+for selected in "${environments[@]}"; do
+  entries=(apps/*/overlays/"$selected"/kustomization.yaml)
+  if (( ${#entries[@]} == 0 )); then printf 'Error: no %s overlays found.\n' "$selected" >&2; exit 1; fi
+  for entry in "${entries[@]}"; do
+    overlay="${entry%/kustomization.yaml}"
+    app_name="${overlay#apps/}"; app_name="${app_name%%/*}"
+    printf 'Rendering %s\n' "$overlay"
+    kubectl kustomize "$overlay" > "$render_dir/$selected-$app_name.yaml"
+  done
+  kubectl kustomize "argocd/$selected" > "$render_dir/$selected-registrations.yaml"
+  root_file=staging.yaml
+  if [[ "$selected" == aws ]]; then root_file=aws.yaml; fi
+  cp "root/$root_file" "$render_dir/$selected-root.yaml"
+done
+if [[ "$ready" == true ]]; then
+  python3 - "$render_dir" <<'PY'
+from pathlib import Path
+import re, sys
+unresolved=[]
+for manifest in sorted(Path(sys.argv[1]).glob('*.yaml')):
+    for number,line in enumerate(manifest.read_text().splitlines(),1):
+        if re.search(r'REPLACE_[A-Z_]+|(?:^|[.\s])example\.(?:com|net|org)\b',line):
+            unresolved.append(f'{manifest.name}:{number}: {line.strip()}')
+if unresolved:
+    raise SystemExit('Replace deployment placeholders before bootstrap or sync:\n'+'\n'.join(unresolved))
+PY
+fi
+python3 tests/manifests.py
 kubeconform -strict -summary \
   -kubernetes-version "${KUBERNETES_VERSION:-1.36.0}" \
   -schema-location default \
   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
   "$render_dir"/*.yaml
-
-printf 'Deployment configuration checks passed.\n'
+printf 'GitOps configuration checks passed; deployment health is separate.\n'

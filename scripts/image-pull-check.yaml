@@ -1,0 +1,36 @@
+# Temporary verification only; deliberately excluded from the app's Kustomize.
+# Run with an explicit context, then delete after success.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: myfastapiapp-image-pull-check
+  namespace: myfastapiapp
+spec:
+  restartPolicy: Never
+  activeDeadlineSeconds: 300
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  imagePullSecrets:
+    - name: registry-credentials
+  containers:
+    - name: image-pull-check
+      image: ghcr.io/pquarg/myfastapiapp:0.1.12
+      imagePullPolicy: Always
+      command: [python, -c, 'print("GHCR image pull OK")']
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      resources:
+        requests:
+          cpu: 50m
+          memory: 32Mi
+        limits:
+          cpu: 250m
+          memory: 128Mi

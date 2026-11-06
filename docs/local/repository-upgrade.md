@@ -1,5 +1,9 @@
 # Upgrade an existing staging installation
 
+For consolidation from the recent two-repository layout, use the
+[GitOps cutover guide](../repository-migration.md). This page covers older local
+namespace, storage and platform ownership migrations; perform only the applicable steps.
+
 Every app now follows the same convention: `apps/<app>` is discovered by the
 ApplicationSet, Application `staging-<app>` deploys into namespace `<app>`, and
 local database PVs use node label `staging.local/postgres-storage: "true"`.
@@ -126,7 +130,7 @@ kubectl --context kind-argocd-postgres -n default wait --for=delete pod \
   -l app=myfastapiapp-pod --timeout=120s
 kubectl --context kind-argocd-postgres -n default delete job myfastapiapp-migrate \
   --ignore-not-found
-NAMESPACE=default ./apps/myfastapiapp/postgres/backup.sh
+NAMESPACE=default ./apps/myfastapiapp/overlays/local/postgres/backup.sh
 ```
 
 Record the backup location and verify recovery by restoring into a disposable
@@ -156,7 +160,7 @@ kubectl --context kind-argocd-postgres -n argocd patch application \
   myfastapiapp-postgres-application --type merge -p '{"metadata":{"finalizers":null}}'
 kubectl --context kind-argocd-postgres -n argocd delete application \
   myfastapiapp-postgres-application
-kubectl --context kind-argocd-postgres -n default delete -k apps/myfastapiapp \
+kubectl --context kind-argocd-postgres -n default delete -k apps/myfastapiapp/overlays/local \
   --ignore-not-found --wait=true --timeout=180s
 ```
 
@@ -208,7 +212,7 @@ direct localhost port mapping can adopt it during the planned rebuild below;
 `infra-local/scripts/setup-ingress-kind.sh` requires that mapping.
 
 Wait for **Synced / Healthy**, then follow the app's
-[verification instructions](../apps/myfastapiapp/README.md#verify-the-deployment).
+[verification instructions](../../apps/myfastapiapp/overlays/local/README.md#verify-the-deployment).
 Confirm the PV claim namespace is `myfastapiapp`, existing accounts still work,
 and the expected records remain. Keep the backup and old Secrets until recovery
 is verified. Afterwards, remove the obsolete node label and the two app-specific
@@ -263,16 +267,16 @@ migration above if still needed. Complete the following during a quiet window:
 2. In Argo CD, pause `staging-root` auto-sync and let its active sync finish.
    Leave the app's deployment unchanged. Pause any other parent that still
    manages `Application/traefik`.
-3. Connect `git@github.com:pquarg/deploy-local.git` in Argo CD before switching
+3. Connect `git@github.com:pquarg/gitops.git` in Argo CD before switching
    sources. The root and ApplicationSet now use that URL, matching this repo's
    actual remote, rather than the old `deploy.git` URL. If a legacy
    `deploy.git` checkout is still active, retire its root registration; there
    must be only one parent managing these registrations. Keep the old Git
    credential until all Applications have switched successfully.
-4. Validate both repositories, review and publish the `deploy-local` changes
+4. Validate both repositories, review and publish the `gitops` changes
    to `main` while the root is paused. Preserve any app maintenance pauses.
 5. Transfer the existing Traefik Application without deleting it or its Helm
-   resources. Run from `deploy-local`:
+   resources. Run from `gitops`:
 
    ```sh
    kubectl --context kind-argocd-postgres -n argocd annotate application traefik \
@@ -291,17 +295,17 @@ migration above if still needed. Complete the following during a quiet window:
 6. With the deployment commit available on `main`, run
    `./scripts/bootstrap-kind.sh`. This updates `staging-root`'s source and
    resumes its auto-sync. The new app-discovery template points generated apps
-   at `deploy-local.git`; the root no longer manages Traefik. Automatic root
+   at `gitops.git`; the root no longer manages Traefik. Automatic root
    pruning remains disabled throughout the transfer.
 7. Verify root and app Applications are **Synced / Healthy**, Traefik is ready,
    and the app health/readiness endpoints and existing data work. If the root
    still lists Traefik, check its tracking metadata and refresh the root after
    confirming its Git source has the split commit.
 
-For a fresh cluster, use [infra-local's setup](../../infra-local/README.md)
+For a fresh cluster, use [infra-local's setup](../../../infra-local/README.md)
 followed by [deployment setup](setup.md). If the old cluster lacks the required
 port mapping or shared storage mount, plan the separate
-[platform rebuild](../../infra-local/docs/rebuild.md) after backing up; this
+[platform rebuild](../../../infra-local/docs/rebuild.md) after backing up; this
 ownership transfer cannot change existing container mounts or published ports.
 
 ## Consolidate platform Helm ownership
@@ -309,7 +313,7 @@ ownership transfer cannot change existing container mounts or published ports.
 The earlier repository-split steps above describe the intermediate Traefik
 Application ownership. The current platform now uses one Terraform state for
 both controllers. After finishing any earlier app/namespace/storage transfer,
-follow [infra-local's adoption guide](../../infra-local/docs/terraform.md#adopt-an-existing-installation)
+follow [infra-local's adoption guide](../../../infra-local/docs/terraform.md#adopt-an-existing-installation)
 to detach the Traefik registration without cascading deletion and adopt its
 running objects into Helm. Do not re-register a Traefik Application after that
 migration. Cluster/data/credentials remain in place. The common deployment

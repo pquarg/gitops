@@ -4,3 +4,10 @@
 *.log
 /apps/**/*-secrets.yaml
 /apps/**/secrets.yaml
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+__pycache__/
+
+*.tfvars

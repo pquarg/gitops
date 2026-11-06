@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: staging-apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: git@github.com:pquarg/gitops.git
+        revision: main
+        directories:
+          - path: apps/*/overlays/local
+  ignoreApplicationDifferences:
+    - jsonPointers:
+        # Allow database maintenance to pause an app's automatic sync.
+        - /spec/syncPolicy/automated
+  syncPolicy:
+    preserveResourcesOnDeletion: true
+  template:
+    metadata:
+      name: 'staging-{{index .path.segments 1}}'
+      namespace: argocd
+      labels:
+        environment: staging
+    spec:
+      project: default
+      source:
+        repoURL: git@github.com:pquarg/gitops.git
+        targetRevision: main
+        path: '{{.path.path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{index .path.segments 1}}'
+      syncPolicy:
+        automated:
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

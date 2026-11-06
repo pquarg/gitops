@@ -1,28 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 usage() {
-  printf 'Usage: %s <app> [cluster]\n' "${0##*/}"
-  printf 'Default: cluster=argocd-postgres; requires kubectl, Python 3 and the app namespace.\n'
-  printf 'Validates updates and new Argo CD hooks using server dry-run; no resources are persisted.\n'
+  printf 'Usage: %s APP --environment local|aws --context CONTEXT [--kubeconfig PATH]\n' "${0##*/}"
+  printf 'Server dry-run only; requires the app namespace and cluster CRDs.\n'
 }
-
-if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-  usage
-  exit 0
+if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then usage; exit 0; fi
+if (( $# < 1 )); then usage >&2; exit 1; fi
+app="$1"; shift
+environment=""; context=""; kubeconfig="${KUBECONFIG:-$HOME/.kube/config}"
+while (( $# )); do
+  case "$1" in
+    --environment|--context|--kubeconfig)
+      if (( $# < 2 )) || [[ -z "$2" || "$2" == --* ]]; then usage >&2; exit 1; fi
+      case "$1" in --environment) environment="$2" ;; --context) context="$2" ;; --kubeconfig) kubeconfig="$2" ;; esac
+      shift 2 ;;
+    *) usage >&2; exit 1 ;;
+  esac
+done
+case "$environment" in local|aws) ;; *) usage >&2; exit 1 ;; esac
+if [[ -z "$context" || "$kubeconfig" == *:* ]]; then usage >&2; exit 1; fi
+if [[ "$environment" == local && "$context" != kind-* ]] || [[ "$environment" == aws && "$context" == kind-* ]]; then
+  printf 'Error: environment and context disagree.\n' >&2; exit 1
 fi
-if (( $# < 1 || $# > 2 )); then
-  usage >&2
-  exit 1
-fi
-
-app="$1"
-context="kind-${2:-argocd-postgres}"
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-if (( ${#app} > 63 )) || [[ ! "$app" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || \
-  [[ ! -f "$project_root/apps/$app/kustomization.yaml" ]]; then
-  printf 'Error: %s must name an app with a root kustomization.yaml under apps/.\n' "$app" >&2
-  exit 1
+overlay="$project_root/apps/$app/overlays/$environment"
+if (( ${#app} > 63 )) || [[ ! "$app" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || [[ ! -f "$overlay/kustomization.yaml" ]]; then
+  printf 'Error: select an app with an overlay for this environment.\n' >&2; exit 1
 fi
 for required_command in kubectl python3; do
   if ! command -v "$required_command" > /dev/null; then
@@ -34,7 +37,7 @@ done
 printf 'Validating app %s in context %s, namespace %s\n' "$app" "$context" "$app"
 # An empty local patch converts the complete Kustomize output to JSON without
 # querying or changing cluster resources. kubectl prints one JSON object per resource.
-kubectl patch --local -k "$project_root/apps/$app" --type=merge -p '{}' -o json |
+kubectl patch --local -k "$overlay" --type=merge -p '{}' -o json |
   python3 -c '
 import json
 import subprocess
@@ -62,7 +65,7 @@ for resource in resources:
     else:
         workloads.append(resource)
 
-kube = ["kubectl", "--context=" + sys.argv[1], "--namespace=" + sys.argv[2]]
+kube = ["kubectl", "--kubeconfig=" + sys.argv[3], "--context=" + sys.argv[1], "--namespace=" + sys.argv[2]]
 try:
     for verb, items in (("apply", workloads), ("create", hooks)):
         if items:
@@ -71,6 +74,6 @@ try:
                            input=json.dumps(manifest), text=True, check=True)
 except subprocess.CalledProcessError as error:
     raise SystemExit(error.returncode)
-' "$context" "$app"
+' "$context" "$app" "$kubeconfig"
 
 printf 'Server dry-run checks passed.\n'

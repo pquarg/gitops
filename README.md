@@ -1,100 +1,82 @@
-# Local app deployments
+# GitOps application deployments
 
-Deploy apps to the local kind cluster `argocd-postgres` using Argo CD and
-Kustomize. Application code and Dockerfiles live in separate app repositories.
-The sibling [infra-local repository](../infra-local/README.md) creates the
-cluster and owns Argo CD installation, host storage/port mappings and shared
-Traefik. This repository owns app discovery, app manifests and releases.
-Cloud deployments have their own parallel infrastructure/deployment repositories.
-
-| App | Namespace | Argo CD Application | URL |
-| --- | --- | --- | --- |
-| `myfastapiapp` | `myfastapiapp` | `staging-myfastapiapp` | http://myfastapiapp.localhost/api/v1/docs/ |
-| New apps | App directory name | `staging-<app>` | Defined by the app's Ingress |
-
-Each app directory is a complete local staging deployment; no environment
-overlays are needed. One root Argo CD Application manages the app-discovery
-ApplicationSet. It discovers `apps/*`; each app syncs independently into its
-own namespace. Apps own their database workloads, storage claims, credentials,
-migrations, backups and recovery procedures.
+One repository deploys the same applications to local kind and AWS EKS.
+Kustomize combines a shared app base with an environment overlay. Each cluster's
+Argo CD reads only its own registrations and overlays from this Git repository.
+Application source and image builds remain in `../apps/`; platform provisioning
+remains in `../infra-local` and `../infra-aws`.
 
 ```text
-apps/
-  myfastapiapp/
-    deployment.yaml
-    service.yaml
-    configmap.yaml
-    ingress.yaml
-    migration-job.yaml
-    postgres/               # App-owned database, retained storage, backup and reset
-    kustomization.yaml      # Complete deployment and release image
-    app-secrets.example.yaml
-    README.md
-argocd/
-  kustomization.yaml        # App registrations managed by staging-root
-  apps.yaml                # Discovers every app under apps/*
-root/staging.yaml          # Root Argo CD Application; apply once per cluster
-scripts/                   # Register apps and validate deployments
-docs/
+apps/myfastapiapp/
+  base/                         # Shared Deployment, Service and migration Job
+  overlays/local/               # Local release, configuration, Traefik and PostgreSQL
+  overlays/aws/                 # AWS release, configuration, ALB and verified RDS TLS
+argocd/local/                   # staging-apps: discovers apps/*/overlays/local
+argocd/aws/                     # aws-apps: discovers apps/*/overlays/aws
+root/staging.yaml               # Existing staging-root identity, local registrations only
+root/aws.yaml                   # Existing aws-root identity, AWS registrations only
+scripts/                        # Common validation/bootstrap and credential helpers
+docs/local/                     # Local setup, credentials and legacy recovery
+docs/aws/                       # AWS setup, infrastructure contract and recovery
 ```
 
-## Set up and deploy
+## Existing installations
 
-1. Prepare the platform using [infra-local](../infra-local/README.md). It
-   supplies the cluster, Argo CD and shared ingress before app registration.
-2. Follow [deployment setup](docs/setup.md) to connect the deployment Git
-   credential, provision each app's Secrets and make its selected image available.
-3. Validate, review and publish these manifests to `main`, then register apps:
+Read [the consolidation and cutover guide](docs/repository-migration.md) first.
+The expected remote is `git@github.com:pquarg/gitops.git`. It must be published and
+readable by both Argo CD installations before switching registrations. Local
+edits alone do not change either cluster. Existing Application, namespace,
+workload, PV/PVC and Secret names are preserved. No rebuild or data transfer is
+needed. Local apps retain automatic self-healing; AWS app sync remains manual.
 
-   ```sh
-   ./scripts/validate.sh
-   git diff --check
-   ./scripts/bootstrap.sh --context kind-argocd-postgres
-   ```
+## Set up an environment
 
-Argo CD reads `git@github.com:pquarg/deploy-local.git`; it cannot deploy unpushed
-local changes. App sync is automatic and includes database migrations, so
-prepare credentials and retained data before registration. The bootstrap script
-requires the platform and only registers this repository's root Application.
-Use `kubectl --context kind-argocd-postgres` to target local staging explicitly.
-
-For existing clusters, follow [the infrastructure ownership transfer](docs/repository-upgrade.md#split-local-infrastructure-from-app-deployment).
-Older installations of `myfastapiapp` in `default` also require the
-[one-time namespace migration](docs/repository-upgrade.md#move-myfastapiapp-out-of-default).
-Moving files between repositories does not rebuild clusters or move data.
-
-## Releases and recovery
-
-Update `images[].newTag` in an app's root Kustomization and follow its release
-runbook. Database changes require the app's controlled backup and sync procedure.
-Manifest-only changes need a deployment-repository commit; platform changes
-belong in `infra-local`.
-
-- [Set up deployment](docs/setup.md)
-- [Upgrade an existing checkout and cluster](docs/repository-upgrade.md)
-- [Add an app](docs/adding-apps.md)
-- [Configure app credentials](docs/credentials.md)
-- [Release, back up and recover myfastapiapp](apps/myfastapiapp/README.md)
-- [Reset disposable myfastapiapp data](apps/myfastapiapp/postgres/reset.md)
-- [Local and CI validation](docs/validation.md)
-- [Tear down and rebuild, keeping the database](../infra-local/README.md#method-1-keep-the-database)
-- [Tear down and rebuild, destroying the database](../infra-local/README.md#method-2-destroy-the-database)
-
-Each database uses `<app>-postgres/` under the laptop storage parent mounted at
-`/mnt`. Create that subdirectory before deploying a new database; apps require no
-additional kind mount. Preserve the original data directory and passwords when
-rebuilding, and restore Secrets before registering app discovery.
-
-To open the Argo CD UI, keep this running and open https://localhost:8080:
+Follow [local setup](docs/local/setup.md) or [AWS setup](docs/aws/setup.md), including
+platform preparation, Git access, app credentials and image availability. On a
+prepared cluster, register only the chosen environment:
 
 ```sh
-kubectl --context kind-argocd-postgres -n argocd \
-  port-forward service/argocd-server 8080:443
+./scripts/bootstrap.sh --environment local --context kind-argocd-postgres
+./scripts/bootstrap.sh --environment aws --context aws-deployment-project
 ```
 
-Initial sign-in and platform maintenance instructions are in `infra-local`.
+These commands target separate clusters; run the one you intend to configure.
+`--kubeconfig /absolute/file` selects one kubeconfig file consistently. The
+`bootstrap-kind.sh [cluster]` and `bootstrap-eks.sh CONTEXT` wrappers remain
+available. Root sync confirms registration, not app, migration or endpoint health.
 
-The common entry point also accepts `--kubeconfig /absolute/path`. It requires an
-explicit context and uses the same file/context for every Kubernetes command.
-`scripts/bootstrap-kind.sh [cluster]` remains a compatibility wrapper. Shared
-Traefik is a Terraform Helm release; Argo CD reconciles application resources.
+## Change and promote an app
+
+Change portable workload settings in `apps/<app>/base/`. Change routing, database
+integration or environment configuration in that app's overlay. Every environment
+using the base receives its next published changes according to its sync policy.
+A shared base change can therefore affect AWS as well as local; review both renders.
+
+The selected release is in each overlay's `kustomization.yaml`. Both environments
+initially select `0.1.12`. Test a new image locally, then promote the same image tag
+(or preferably immutable digest) to the AWS overlay without rebuilding it. API
+and migration Job use the same selected image within each environment. Database
+contents and credentials remain independent; switching an image does not reverse
+a schema migration. Follow the environment's app release and backup runbook.
+
+```sh
+kubectl kustomize apps/myfastapiapp/overlays/local
+kubectl kustomize apps/myfastapiapp/overlays/aws
+./scripts/validate.sh --ready
+git diff --check
+```
+
+The validator checks both environments, bootstrap safety, credential-helper tests
+and Kubernetes/Argo CD schemas. It needs kubectl, kubeconform, Python 3 and internet
+access, but no running cluster or AWS credentials. Use `--environment local` or
+`--environment aws` to select one environment's schema validation. See
+[validation](docs/validation.md) for limits and explicit-context server dry-runs.
+
+- [Add an app](docs/adding-apps.md)
+- [Local app releases, database backups and recovery](apps/myfastapiapp/overlays/local/README.md)
+- [AWS app releases, RDS and recovery](apps/myfastapiapp/overlays/aws/README.md)
+- [Local platform](../infra-local/README.md)
+- [AWS platform](../infra-aws/README.md)
+
+Filled Secret files remain ignored and outside Kustomize. Keep database files,
+backups, credentials, Terraform state and saved plans outside version control.

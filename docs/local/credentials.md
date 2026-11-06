@@ -6,7 +6,7 @@ Create the app's namespace before provisioning Secrets. Image pull Secrets must
 exist in every namespace that consumes them. See [adding apps](adding-apps.md).
 
 Database credentials and connection settings belong to the app. Start with
-[myfastapiapp credentials](../apps/myfastapiapp/README.md#provision-credentials).
+[myfastapiapp credentials](../../apps/myfastapiapp/overlays/local/README.md#provision-credentials).
 The shared Git credential used by Argo CD is configured during
 [deployment Git connection](setup.md#2-connect-the-deployment-git-repository).
 

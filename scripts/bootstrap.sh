@@ -1,62 +1,88 @@
 #!/usr/bin/env bash
 set -euo pipefail
 usage() {
-  printf 'Usage: %s --context CONTEXT [--kubeconfig PATH]\n' "${0##*/}"
-  printf 'Validate and register applications on an existing platform; app readiness is separate.\n'
+  printf 'Usage: %s --environment local|aws --context CONTEXT [--kubeconfig PATH]\n' "${0##*/}"
+  printf 'Validate and register one environment on an existing platform; app readiness is separate.\n'
 }
+environment=""
 context=""
 kubeconfig="${KUBECONFIG:-$HOME/.kube/config}"
 while (( $# )); do
   case "$1" in
-    --context|--kubeconfig)
+    --environment|--context|--kubeconfig)
       if (( $# < 2 )) || [[ -z "$2" || "$2" == --* ]]; then usage >&2; exit 1; fi
-      case "$1" in --context) context="$2" ;; --kubeconfig) kubeconfig="$2" ;; esac
+      case "$1" in
+        --environment) environment="$2" ;;
+        --context) context="$2" ;;
+        --kubeconfig) kubeconfig="$2" ;;
+      esac
       shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) usage >&2; exit 1 ;;
   esac
 done
 if [[ -z "$context" ]]; then usage >&2; exit 1; fi
-# One file, not an ambient list that the caller may interpret differently.
+case "$environment" in
+  local)
+    if [[ "$context" != kind-* ]]; then
+      printf 'Error: local registration requires an explicit kind-* context.\n' >&2; exit 1
+    fi
+    root_name=staging-root
+    root_file=staging.yaml ;;
+  aws)
+    if [[ "$context" == kind-* ]]; then
+      printf 'Error: AWS registration cannot target a kind context.\n' >&2; exit 1
+    fi
+    root_name=aws-root
+    root_file=aws.yaml ;;
+  *) usage >&2; exit 1 ;;
+esac
+# Select one file consistently instead of an ambient kubeconfig list.
 if [[ "$kubeconfig" == *:* ]]; then
   printf 'Error: select one kubeconfig file with --kubeconfig PATH.\n' >&2; exit 1
 fi
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-"$project_root/scripts/validate.sh"
+validation_args=(--environment "$environment")
+if [[ "$environment" == aws ]]; then validation_args+=(--ready); fi
+"$project_root/scripts/validate.sh" "${validation_args[@]}"
 kube=(kubectl "--kubeconfig=$kubeconfig" "--context=$context")
 "${kube[@]}" get nodes > /dev/null
 "${kube[@]}" -n argocd wait --for=condition=Established \
   crd/applications.argoproj.io crd/applicationsets.argoproj.io --timeout=120s
-# Prevent discovery from starting a second Postgres against the retained data.
-legacy_application="$("${kube[@]}" -n argocd get application myfastapiapp-postgres-application --ignore-not-found -o name)"
-legacy_claim="$("${kube[@]}" --namespace=default \
-  get pvc myfastapiapp-postgres-pvc --ignore-not-found -o name)"
-if [[ -n "$legacy_application" || -n "$legacy_claim" ]]; then
-  printf 'Error: migrate myfastapiapp out of default before bootstrapping.\n' >&2
-  printf 'Follow docs/repository-upgrade.md#move-myfastapiapp-out-of-default.\n' >&2
-  exit 1
+if [[ "$environment" == local ]]; then
+  # Prevent discovery from starting a second Postgres against retained data.
+  legacy_application="$("${kube[@]}" -n argocd get application myfastapiapp-postgres-application --ignore-not-found -o name)"
+  legacy_claim="$("${kube[@]}" --namespace=default get pvc myfastapiapp-postgres-pvc --ignore-not-found -o name)"
+  legacy_root="$("${kube[@]}" -n argocd get application staging-bootstrap --ignore-not-found -o name)"
+  if [[ -n "$legacy_application" || -n "$legacy_claim" || -n "$legacy_root" ]]; then
+    printf 'Error: complete the legacy namespace/root migration in docs/local/repository-upgrade.md first.\n' >&2
+    exit 1
+  fi
 fi
-
-legacy_root="$("${kube[@]}" -n argocd get application staging-bootstrap --ignore-not-found -o name)"
-if [[ -n "$legacy_root" ]]; then
-  printf 'Error: rename staging-bootstrap before registering staging-root.\n' >&2
-  printf 'Follow docs/repository-upgrade.md#rename-the-root-application.\n' >&2
-  exit 1
-fi
-
-
 for deployment in argocd-server argocd-repo-server argocd-applicationset-controller; do
   "${kube[@]}" -n argocd rollout status "deployment/$deployment" --timeout=300s
 done
 "${kube[@]}" -n argocd rollout status statefulset/argocd-application-controller --timeout=300s
-"${kube[@]}" -n traefik rollout status deployment/traefik --timeout=300s
-controller="$("${kube[@]}" get ingressclass traefik -o jsonpath='{.spec.controller}')"
-if [[ "$controller" != traefik.io/ingress-controller ]]; then
-  printf 'Error: infra-local must provision IngressClass traefik.\n' >&2; exit 1
+if [[ "$environment" == local ]]; then
+  "${kube[@]}" -n traefik rollout status deployment/traefik --timeout=300s
+  controller="$("${kube[@]}" get ingressclass traefik -o jsonpath='{.spec.controller}')"
+  expected_controller=traefik.io/ingress-controller
+else
+  "${kube[@]}" -n kube-system rollout status deployment/aws-load-balancer-controller --timeout=300s
+  controller="$("${kube[@]}" get ingressclass alb -o jsonpath='{.spec.controller}')"
+  expected_controller=ingress.k8s.aws/alb
 fi
-printf 'Registering applications from deploy-local/main\n'
-"${kube[@]}" -n argocd apply -f "$project_root/root/staging.yaml"
+if [[ "$controller" != "$expected_controller" ]]; then
+  printf 'Error: provision the expected %s ingress controller through infra-%s first.\n' "$environment" "$environment" >&2
+  exit 1
+fi
+printf 'Registering %s applications from gitops/main\n' "$environment"
+"${kube[@]}" -n argocd apply -f "$project_root/root/$root_file"
 "${kube[@]}" -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced \
-  application/staging-root --timeout=300s
-printf 'Registrations synced. Automatic app syncs, migrations and rollouts continue through Argo CD.\n'
+  "application/$root_name" --timeout=300s
+if [[ "$environment" == local ]]; then
+  printf 'Registrations synced. Automatic app syncs, migrations and rollouts continue through Argo CD.\n'
+else
+  printf 'Registrations synced. Review AWS apps and sync them manually in Argo CD.\n'
+fi
 "${kube[@]}" -n argocd get applications

@@ -1,12 +1,13 @@
 # Set up local app deployment
 
-Run commands from `deploy-local` unless stated otherwise. The default cluster
+Run commands from `gitops` unless stated otherwise. The default cluster
 is `argocd-postgres`, context `kind-argocd-postgres`. For an existing cluster,
-follow [the upgrade guide](repository-upgrade.md) before publishing the split.
+follow [repository cutover](../repository-migration.md). Older pre-split installations
+also need [the legacy upgrade guide](repository-upgrade.md).
 
 ## 1. Prepare the platform with infra-local
 
-Follow [infra-local's README](../../infra-local/README.md) to configure the kind
+Follow [infra-local's README](../../../infra-local/README.md) to configure the kind
 storage parent and localhost port mapping, create the cluster, install Argo CD
 and install shared Traefik through Terraform Helm. Its scripts run from that separate repository:
 
@@ -14,12 +15,12 @@ and install shared Traefik through Terraform Helm. Its scripts run from that sep
 cd ../infra-local
 ./scripts/create-cluster.sh
 ./scripts/bootstrap-kind.sh
-cd ../deploy-local
+cd ../gitops
 ```
 
 Create the ignored kind config and storage directory as documented there first.
 Skip cluster creation for an existing cluster. Do not rebuild or move database
-files merely to adopt the repository split.
+files merely to consolidate the deployment repositories.
 
 The platform must provide:
 
@@ -35,12 +36,12 @@ app owns its database data, PV/PVC, backup and recovery.
 
 ## 2. Connect the deployment Git repository
 
-Open the Argo CD UI following [infra-local's sign-in instructions](../../infra-local/README.md#2-install-argo-cd-and-shared-ingress).
+Open the Argo CD UI following [infra-local's sign-in instructions](../../../infra-local/README.md#2-install-argo-cd-and-shared-ingress).
 Under **Settings → Repositories**, connect
-`git@github.com:pquarg/deploy-local.git` with a read-only Git credential usable
+`git@github.com:pquarg/gitops.git` with a read-only Git credential usable
 by the `default` project. Argo CD must show the repository connection as
 successful before registration. If using another remote, update every
-`repoURL` in `root/staging.yaml` and `argocd/apps.yaml` to match it.
+`repoURL` in `root/staging.yaml` and `argocd/local/apps.yaml` to match it.
 
 This credential reads deployment manifests. App registry credentials are
 separate and belong in each app's namespace. No credential for an `infra-local`
@@ -50,7 +51,7 @@ Git remote is required: its platform configuration is applied from disk.
 
 Follow each app's README to provision its namespace, database and registry
 Secrets, host storage subdirectory and selected image before automatic sync.
-Start with [myfastapiapp](../apps/myfastapiapp/README.md#provision-credentials).
+Start with [myfastapiapp](../../apps/myfastapiapp/overlays/local/README.md#provision-credentials).
 For more apps, follow [adding apps](adding-apps.md) and
 [registry credentials](credentials.md#registry-authentication).
 
@@ -72,27 +73,27 @@ it cannot deploy files that exist only in this checkout. With the platform and
 credentials ready:
 
 ```sh
-./scripts/bootstrap.sh --context kind-argocd-postgres
+./scripts/bootstrap.sh --environment local --context kind-argocd-postgres
 kubectl --context kind-argocd-postgres -n argocd get applications
 ```
 
 The script validates first, checks the Argo CD controllers and shared ingress, then applies only
-`staging-root`. The root manages the ApplicationSet in `argocd/kustomization.yaml`.
-It discovers every `apps/*` directory and creates an independent Application,
+`staging-root`. The root manages the ApplicationSet in `argocd/local/kustomization.yaml`.
+It discovers every `apps/*/overlays/local` entry point and creates an independent Application,
 including `staging-myfastapiapp` in namespace `myfastapiapp`. Each app applies
 its storage, waits for Postgres, runs migrations and rolls out the API. Traefik
 is managed separately by `infra-local`.
 
 Root **Synced** means registration was applied; wait for the app's own
 **Synced / Healthy** status before testing. Follow its
-[verification procedure](../apps/myfastapiapp/README.md#verify-the-deployment).
+[verification procedure](../../apps/myfastapiapp/overlays/local/README.md#verify-the-deployment).
 The HTTP route is localhost port 80 → kind node port 30080 → shared Traefik →
 app Service. Docker Desktop and the cluster must remain running.
 
 ## Recovery
 
-For platform replacement, choose [keep the database](../../infra-local/README.md#method-1-keep-the-database)
-or [destroy the database](../../infra-local/README.md#method-2-destroy-the-database).
+For platform replacement, choose [keep the database](../../../infra-local/README.md#method-1-keep-the-database)
+or [destroy the database](../../../infra-local/README.md#method-2-destroy-the-database).
 Both methods recreate Kubernetes objects and Secrets. Retained data needs the
 original database credentials, storage mount and a compatible PostgreSQL major
 version; fresh data may use new matching credentials. Follow each app's recovery

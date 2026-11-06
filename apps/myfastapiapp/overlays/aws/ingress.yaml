@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myfastapiapp-ingress
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    alb.ingress.kubernetes.io/load-balancer-name: deployment-project-dev-app
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/ip-address-type: ipv4
+    alb.ingress.kubernetes.io/target-type: ip
+    # Terraform owns this frontend group; the controller owns backend access.
+    alb.ingress.kubernetes.io/security-groups: sg-0e84da2f851551dff
+    alb.ingress.kubernetes.io/manage-backend-security-group-rules: "true"
+    # Viewer HTTPS terminates at CloudFront; this listener is private.
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-path: /ready
+    alb.ingress.kubernetes.io/success-codes: "200"
+spec:
+  # Requires the AWS Load Balancer Controller, provisioned by infra.
+  ingressClassName: alb
+  rules:
+    # Accept the viewer hostname forwarded by the future CloudFront distribution.
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: myfastapiapp-service
+                port:
+                  number: 80

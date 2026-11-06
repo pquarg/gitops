@@ -1,56 +1,52 @@
-# Validate deployment configuration
+# Validate GitOps configuration
 
-Install kubectl and [kubeconform](https://github.com/yannh/kubeconform).
-CI pins kubectl `v1.36.1` and kubeconform `v0.8.0`;
-use those versions locally for matching results. Homebrew provides kubeconform
-with `brew install kubeconform`; pinned binaries are available on its release page.
+Install kubectl, kubeconform and Python 3. CI pins kubectl `v1.36.1`, kubeconform
+`v0.8.0` and Kubernetes schemas `1.36.0`. Use matching tools for matching results;
+`KUBERNETES_VERSION` selects another available schema version.
 
-Run from any directory:
-
-```sh
-/path/to/deploy-local/scripts/validate.sh
-```
-
-From this repository root, use `./scripts/validate.sh`. It checks:
-
-- Bash syntax for every script under `scripts/` and `apps/`.
-- App directory names and every `apps/*/kustomization.yaml` deployment entry point.
-  New apps are discovered automatically and need no individual registration file.
-- Rendered app resources, the ApplicationSet and the
-  root Application against schemas, with unknown kinds and fields treated
-  as failures.
-
-Built-in resources use Kubernetes `1.36.0` schemas by default. Set
-`KUBERNETES_VERSION` to another available schema version if targeting a different
-cluster. Argo CD resources use the CRD catalog schema source configured in the
-script. Validation downloads schemas and requires internet access; adding a new
-CRD may require adding its schema source. Validation requires neither Docker nor
-Kubernetes API access.
-
-CI runs the same script for pushes and pull requests. Render each app's root
-Kustomization so its optional database and release image selection are included.
-For a cluster-aware check with Python 3 available and the app's namespace
-already provisioned, use:
+Run from this repository, or invoke the script by its absolute path:
 
 ```sh
-./scripts/validate-server.sh myfastapiapp
+./scripts/validate.sh
+./scripts/validate.sh --ready
+./scripts/validate.sh --environment local
+./scripts/validate.sh --environment aws --ready
+git diff --check
 ```
 
-This renders the app's complete Kustomization, dry-runs updates to ordinary
-resources, and dry-runs creation of Argo CD hooks under generated names. A
-retained migration Job has an immutable Pod template; applying a new image to
-that existing Job would fail even though Argo CD replaces the hook during sync.
-The script preserves the existing Job and logs and does not run migrations or
-persist resources. It requires Kubernetes API access. To target another kind
-cluster, pass its name as the second argument:
+By default both overlays and both environment-specific registrations are rendered.
+The validator checks app names, base/overlay entry points, Bash syntax, bootstrap
+failure/selection behavior, credential helper tests and strict schemas. Additional
+regression checks protect the existing local PV identity and retention, AWS/local
+resource isolation, sync policies and matching API/migration images. `--environment`
+selects the rendered resources for schema/placeholder checking; the shared safety
+regression checks still cover both environments.
+
+`--ready` rejects `REPLACE_...` values and reserved example domains in rendered
+manifests. Empty Secret examples are deliberately excluded. Strict kubeconform
+validation fetches built-in schemas and Argo CD schemas from the configured CRD
+catalog; unknown kinds fail instead of being silently skipped. Internet access
+is required. No Docker, AWS credentials or Kubernetes API access is required.
+CI runs the same script with `--ready` on pushes and pull requests.
+
+## Server dry-run
+
+After provisioning the namespace and cluster CRDs, select the environment and
+context explicitly:
 
 ```sh
-./scripts/validate-server.sh myfastapiapp another-cluster
+./scripts/validate-server.sh myfastapiapp --environment local --context kind-argocd-postgres
+./scripts/validate-server.sh myfastapiapp --environment aws --context aws-deployment-project
 ```
 
-Schema validation cannot prove image availability, Secret presence, database
-compatibility or runtime health. Use the app's release verification for those.
+`--kubeconfig /absolute/file` is also supported. The script dry-runs ordinary
+updates and creates hook Jobs under generated names, preserving the existing
+migration Job and logs. It does not run migrations or persist resources. Admission
+webhooks must support/reach the dry-run. Local selection requires a kind context;
+AWS selection rejects kind contexts, and bootstrap additionally checks the matching
+platform ingress controller before registering anything.
 
-Cluster creation, the Argo CD installation and shared Traefik are validated
-separately by `infra-local/scripts/validate.sh`. See
-[infra-local](../../infra-local/README.md#validate-and-update).
+Configuration validation cannot prove image availability, Secret presence,
+database compatibility, successful migrations, cluster health or endpoint health.
+Use the environment's app verification runbook for those checks. Platform
+configuration is validated in the owning infrastructure repository.
