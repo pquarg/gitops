@@ -9,7 +9,7 @@ remains in `../infra-local` and `../infra-aws`.
 ```text
 apps/myfastapiapp/
   base/                         # Shared Deployment, Service and migration Job
-  overlays/local/               # Local release, configuration, Traefik and PostgreSQL
+  overlays/local/               # Local release, configuration and Traefik
   overlays/aws/                 # AWS release, configuration, ALB and verified RDS TLS
 argocd/local/                   # staging-apps: discovers apps/*/overlays/local
 argocd/aws/                     # aws-apps: discovers apps/*/overlays/aws
@@ -26,8 +26,10 @@ Read [the consolidation and cutover guide](docs/repository-migration.md) first.
 The expected remote is `git@github.com:pquarg/gitops.git`. It must be published and
 readable by both Argo CD installations before switching registrations. Local
 edits alone do not change either cluster. Existing Application, namespace,
-workload, PV/PVC and Secret names are preserved. No rebuild or data transfer is
-needed. Local apps retain automatic self-healing; AWS app sync remains manual.
+workload, PV/PVC and Secret names are preserved by that repository cutover. It
+needs no rebuild or data transfer. Moving local PostgreSQL outside kind is a
+separate [database cutover](docs/local/database-migration.md) with a verified
+dump/restore. Local apps retain automatic self-healing; AWS app sync remains manual.
 
 ## Set up an environment
 
@@ -77,6 +79,13 @@ access, but no running cluster or AWS credentials. Use `--environment local` or
 - [AWS app releases, RDS and recovery](apps/myfastapiapp/overlays/aws/README.md)
 - [Local platform](../infra-local/README.md)
 - [AWS platform](../infra-aws/README.md)
+
+Local PostgreSQL is provisioned separately by `infra-local`, outside kind,
+just as RDS is provisioned outside EKS. App sync runs migrations and rolls out the
+API against an existing database in both environments. Existing local databases
+need the [verified cutover](docs/local/database-migration.md) before publishing the
+overlay change; legacy manifests/tools remain for recovery and are not included
+in the active overlay.
 
 Filled Secret files remain ignored and outside Kustomize. Keep database files,
 backups, credentials, Terraform state and saved plans outside version control.

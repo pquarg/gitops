@@ -1,4 +1,4 @@
-"""Check environment isolation and retained data identities in rendered resources."""
+"""Check environment isolation, external databases and selected release images."""
 import json
 from pathlib import Path
 import subprocess
@@ -31,12 +31,8 @@ for env, prefix in [('local', 'staging'), ('aws', 'aws')]:
     ingress = resources['Ingress', 'myfastapiapp-ingress']
     assert ingress['spec']['ingressClassName'] == ('traefik' if env == 'local' else 'alb')
     if env == 'local':
-        pv = resources['PersistentVolume', 'myfastapiapp-postgres-pv']
-        assert pv['spec']['local']['path'] == '/mnt/myfastapiapp-postgres'
-        assert pv['spec']['claimRef']['namespace'] == 'myfastapiapp'
-        assert pv['spec']['persistentVolumeReclaimPolicy'] == 'Retain'
-        assert pv['metadata']['annotations']['argocd.argoproj.io/sync-options'] == 'Prune=false,Delete=false'
-        assert ('StatefulSet', 'myfastapiapp-postgres-statefulset') in resources
+        assert not any(kind in ('PersistentVolume', 'PersistentVolumeClaim', 'StatefulSet') for kind, name in resources), 'Local app sync must not provision database/storage'
+        assert ('Service', 'myfastapiapp-postgres-service') not in resources
         assert not any('rds-ca' in name for kind, name in resources)
     else:
         assert not any(kind in ('PersistentVolume', 'PersistentVolumeClaim', 'StatefulSet') for kind, name in resources), 'AWS must not deploy local database/storage'
@@ -62,4 +58,11 @@ for env, prefix in [('local', 'staging'), ('aws', 'aws')]:
     assert root['spec']['source']['repoURL'] == generator['repoURL']
     assert appset['spec']['template']['metadata']['name'] == prefix + '-{{index .path.segments 1}}'
     assert bool(template['syncPolicy'].get('automated')) == (env == 'local')
-print('Rendered environment isolation, image consistency and retained storage checks passed.')
+# Legacy storage remains available for migration/recovery, outside app discovery.
+legacy = render('apps/myfastapiapp/overlays/local/postgres')
+pv = legacy['PersistentVolume', 'myfastapiapp-postgres-pv']
+assert pv['spec']['local']['path'] == '/mnt/myfastapiapp-postgres'
+assert pv['spec']['claimRef']['namespace'] == 'myfastapiapp'
+assert pv['spec']['persistentVolumeReclaimPolicy'] == 'Retain'
+assert pv['metadata']['annotations']['argocd.argoproj.io/sync-options'] == 'Prune=false,Delete=false'
+print('Rendered environment isolation, external database and image consistency checks passed.')

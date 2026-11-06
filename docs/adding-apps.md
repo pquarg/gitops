@@ -32,10 +32,12 @@ container ports, probes, Service, migration command and compatible security/reso
 settings. Keep environment differences in overlays; see myfastapiapp for an example
 that preserves its existing AWS security settings in an AWS patch.
 
-Local database workloads, PV/PVCs, backups and reset instructions belong in the
-local overlay. Each app's database path is `/mnt/<app>-postgres` under the platform's
-existing parent mount. Use a unique retained PV bound to that app's namespace, with
-`Prune=false,Delete=false` protection. Follow [local setup](local/setup.md).
+Provision local deployment databases separately through `infra-local`, outside
+kind. Keep connection Secrets and schema migration Jobs in GitOps. Each app must
+have its own database, restricted login and independent backup/recovery plan.
+Use [myfastapiapp's database setup](../../infra-local/docs/database.md) as the current
+example. Legacy PV/PVC manifests and laptop paths under `/mnt/<app>-postgres`
+remain only for unmigrated installations and recovery.
 
 AWS databases and other cloud resources belong in `infra-aws`. The AWS overlay
 contains connection configuration, verified database TLS and an ALB Ingress.

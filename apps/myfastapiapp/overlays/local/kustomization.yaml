@@ -3,7 +3,6 @@ kind: Kustomization
 resources:
   - configmap.yaml
   - ../../base
-  - ./postgres
   - ingress.yaml
 images:
   # Sets the release image for both the API Deployment and migration Job.

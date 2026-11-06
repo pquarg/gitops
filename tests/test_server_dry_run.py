@@ -46,8 +46,7 @@ with open(os.environ['CALL_LOG'], 'a') as output:
                     self.assertIn('--dry-run=server', call['args'])
                 regular = calls[0]['resource']['items']
                 self.assertFalse(any('argocd.argoproj.io/hook' in item['metadata'].get('annotations', {}) for item in regular))
-                database = any(item['kind'] == 'StatefulSet' for item in regular)
-                self.assertEqual(database, environment == 'local')
+                self.assertFalse(any(item['kind'] in ('StatefulSet', 'PersistentVolume', 'PersistentVolumeClaim') for item in regular))
                 hooks = calls[1]['resource']['items']
                 self.assertEqual(len(hooks), 1)
                 self.assertEqual(hooks[0]['kind'], 'Job')

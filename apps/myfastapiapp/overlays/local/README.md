@@ -1,7 +1,7 @@
 # myfastapiapp staging deployment
 
-Run commands from the deployment repository root. Application code, Dockerfiles
-and Alembic revisions live in the separate `myfastapiapp` repository.
+Run commands from `gitops`. Source, image builds and Alembic revisions live in
+`apps/myfastapiapp`; the deployment database is provisioned by `infra-local`.
 
 | Setting | Value |
 | --- | --- |
@@ -9,75 +9,77 @@ and Alembic revisions live in the separate `myfastapiapp` repository.
 | Namespace | `myfastapiapp` |
 | Argo CD Application | `staging-myfastapiapp` |
 | URL | http://myfastapiapp.localhost/api/v1/docs/ |
+| Database endpoint from Pods | `host.docker.internal:5433` (Docker Desktop) |
 
-This app owns its Postgres database, storage, credentials, migrations and backup
-procedure. The shared ApplicationSet discovers this directory and creates its
-Application and namespace using the same [convention as every app](../../../../docs/local/adding-apps.md).
-For an installation still running in `default`, complete the
-[one-time migration](../../../../docs/local/repository-upgrade.md#move-myfastapiapp-out-of-default)
-before deploying these manifests.
+The local and AWS overlays use the same API Deployment and migration Job. Both
+connect to an already provisioned external PostgreSQL database through
+`myfastapiapp-secrets`. Local uses a separate Compose container; AWS uses RDS.
+The local overlay contains app configuration and Traefik ingress, with no
+PostgreSQL workload or storage in the app sync.
 
-This overlay’s `kustomization.yaml` includes the shared base and local Postgres resources and selects
-one release image for both the API and migration Job. Edit `configmap.yaml` for
-`APP_MESSAGE`, `../../base/deployment.yaml` for shared resources and probes, and `ingress.yaml` for
-routing. Provision the [cluster](../../../../docs/local/setup.md) before the first sync.
+Existing Kubernetes databases must follow the [database cutover](../../../../docs/local/database-migration.md)
+before publishing this overlay change. Installations still in `default` must
+first finish the [legacy namespace migration](../../../../docs/local/repository-upgrade.md#move-myfastapiapp-out-of-default).
 
 ## Provision credentials
 
-Provision these Secrets in namespace `myfastapiapp` before the first sync:
+First follow [database provisioning](../../../../../infra-local/docs/database.md#first-setup).
+Keep the database running before app sync, as with RDS on AWS. Provision these
+Secrets in namespace `myfastapiapp`:
 
-| Ignored file or credential | Secret in namespace `myfastapiapp` |
+| Ignored file or credential | Secret |
 | --- | --- |
 | `apps/myfastapiapp/overlays/local/app-secrets.yaml` | `myfastapiapp-secrets` with `AUTH_DATABASE_URL` |
-| `apps/myfastapiapp/overlays/local/postgres/postgres-secrets.yaml` | `myfastapiapp-postgres-secrets` with `POSTGRES_PASSWORD` |
-| GitHub package token, entered interactively | `registry-credentials` for private image pulls |
-
-For the database files:
+| GitHub package token, entered interactively | `registry-credentials` |
 
 ```sh
 kubectl --context kind-argocd-postgres create namespace myfastapiapp
 cp -n apps/myfastapiapp/overlays/local/app-secrets.example.yaml apps/myfastapiapp/overlays/local/app-secrets.yaml
-cp -n apps/myfastapiapp/overlays/local/postgres/postgres-secrets.example.yaml \
-  apps/myfastapiapp/overlays/local/postgres/postgres-secrets.yaml
-chmod 600 apps/myfastapiapp/overlays/local/app-secrets.yaml \
-  apps/myfastapiapp/overlays/local/postgres/postgres-secrets.yaml
-git check-ignore apps/myfastapiapp/overlays/local/app-secrets.yaml \
-  apps/myfastapiapp/overlays/local/postgres/postgres-secrets.yaml
+chmod 600 apps/myfastapiapp/overlays/local/app-secrets.yaml
+git check-ignore apps/myfastapiapp/overlays/local/app-secrets.yaml
 ```
 
-Choose one password and enter it in both local files in your editor. Set
-`POSTGRES_PASSWORD` to the password and `AUTH_DATABASE_URL` to
-`postgresql://myfastapiapp:YOUR_PASSWORD@myfastapiapp-postgres-service:5432/myfastapiapp`.
-A hex password from a password manager or `openssl rand -hex 24` avoids URL escaping.
-For special characters, URL-encode the password in the URL and keep the original
-value in `POSTGRES_PASSWORD`.
+Set `AUTH_DATABASE_URL` privately in that file using the Compose **app** password,
+URL-encoded, and its configured published port (default 5433):
+
+```text
+postgresql://myfastapiapp:ENCODED_PASSWORD@host.docker.internal:5433/myfastapiapp?sslmode=disable
+```
+
+This endpoint is for kind Pods on Docker Desktop; host clients use localhost.
+Local TLS is disabled; AWS retains verified TLS and its RDS CA mounts.
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp apply \
-  -f apps/myfastapiapp/overlays/local/app-secrets.yaml \
-  -f apps/myfastapiapp/overlays/local/postgres/postgres-secrets.yaml
+kubectl --context kind-argocd-postgres -n myfastapiapp apply -f apps/myfastapiapp/overlays/local/app-secrets.yaml
 ```
 
 Create `registry-credentials` using the shared [registry instructions](../../../../docs/local/credentials.md#registry-authentication).
+Make the selected image available as below, then check the actual Pod-to-database
+path before registering or syncing the app:
 
-Secrets are provisioned separately from Argo CD. Keep filled files out of both
-Git and Kustomize. Kubernetes Secret base64 encoding is reversible.
+```sh
+./scripts/check-local-database.py --environment local --context kind-argocd-postgres
+```
+
+This temporary Job uses the selected app image and connection Secret, verifies
+restricted app privileges and rolls back a small DDL/data probe. It leaves the
+schema unchanged and does not require an existing API Deployment or migration.
+It needs a ready cluster, namespace, Secret and image. Do not proceed if it fails.
+Filled Secret files stay outside Git and Kustomize.
 
 ## Update configuration or credentials
 
-Apply edited local database Secrets with the command above. Secret and ConfigMap
-values consumed as environment variables do not refresh in running Pods. After
-applying a Secret or syncing a ConfigMap, restart the app through Argo CD or run:
+Apply edited connection Secrets with the command above. Environment variables do
+not refresh in running Pods. Restart the API through Argo CD or explicitly:
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp \
-  rollout restart deployment/myfastapiapp-deployment
-kubectl --context kind-argocd-postgres -n myfastapiapp \
-  rollout status deployment/myfastapiapp-deployment --timeout=180s
+kubectl --context kind-argocd-postgres -n myfastapiapp rollout restart deployment/myfastapiapp-deployment
+kubectl --context kind-argocd-postgres -n myfastapiapp rollout status deployment/myfastapiapp-deployment --timeout=180s
 ```
 
-`POSTGRES_PASSWORD` initializes a new database. Updating the Secret alone does
-not rotate an existing database role's password; see [recovery](#recovery-after-a-cluster-rebuild).
+Changing a password file or Kubernetes Secret does not rotate an existing database
+role. Follow [database credential rotation](../../../../../infra-local/docs/database.md#lifecycle-and-credentials),
+then run the connectivity probe and verify readiness/login.
 
 ## Make the app image available
 
@@ -104,40 +106,38 @@ kind load docker-image "$APP_IMAGE" --name argocd-postgres
 ```
 
 Use a new image tag for every code release. `IfNotPresent` can reuse a previously
-loaded image with the same tag. Existing Compose databases and Kubernetes storage
-are independent; this setup does not copy existing records.
+loaded image with the same tag. The app repository’s development Compose database
+and infra-local’s deployment database are independent; neither copies records automatically.
 
 ## Verify the deployment
 
-After the shared [bootstrap procedure](../../../../docs/local/setup.md#4-validate-publish-and-register-staging),
-wait for this app to be **Synced / Healthy** and verify it:
+After [bootstrap](../../../../docs/local/setup.md#4-validate-publish-and-register-staging),
+wait for app sync and migration completion. Then:
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp \
-  rollout status deployment/myfastapiapp-deployment --timeout=300s
-kubectl --context kind-argocd-postgres -n myfastapiapp get pvc,pods
-kubectl --context kind-argocd-postgres get pv myfastapiapp-postgres-pv
+kubectl --context kind-argocd-postgres -n myfastapiapp logs job/myfastapiapp-migrate
+kubectl --context kind-argocd-postgres -n myfastapiapp rollout status deployment/myfastapiapp-deployment --timeout=300s
+kubectl --context kind-argocd-postgres -n myfastapiapp exec deployment/myfastapiapp-deployment -- python -m alembic current --check-heads
 curl -fsS http://myfastapiapp.localhost/health
 curl -fsS http://myfastapiapp.localhost/ready
 ```
 
-The readiness probe uses `/ready` to check database connectivity, with a
-three-second timeout for its two-second database check. Liveness uses `/health`
-to check that the API process is responding.
+`/health` checks the API process; `/ready` checks database connectivity. Confirm
+Argo CD reports Healthy and the intended revision. A fresh installation should
+also be Synced; retained legacy resources can cause OutOfSync after migration,
+as explained in the [cutover runbook](../../../../docs/local/database-migration.md).
+Test new registration and login, plus existing login/records after data migration.
+Docker Desktop, the separate database and kind must all remain running.
 
-Open http://myfastapiapp.localhost/api/v1/docs/, register a test account, and log
-in. The route is localhost port 80 -> kind node port 30080 -> Traefik -> the app
-Service -> FastAPI. Docker Desktop and the cluster must remain running.
-
-For a direct connection while diagnosing ingress:
+The route is localhost port 80 → kind node port 30080 → shared Traefik → app
+Service → FastAPI. For a direct diagnostic connection:
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp \
-  port-forward service/myfastapiapp-service 18000:80
+kubectl --context kind-argocd-postgres -n myfastapiapp port-forward service/myfastapiapp-service 18000:80
 ```
 
-Open http://localhost:18000/api/v1/docs/. Inspect Pod events and migration logs
-if rollout fails. Routine releases now follow the [release procedure](#release).
+Open http://localhost:18000/api/v1/docs/. Inspect migration logs and Pod events
+if rollout fails.
 
 ## Release
 
@@ -154,108 +154,54 @@ if rollout fails. Routine releases now follow the [release procedure](#release).
 Use a new image tag for each code release. Manifest-only edits, such as resource
 settings, replicas, and Ingress rules, need only a deployment-repository commit.
 FastAPI keeps its app release version; PostgreSQL has its own image version in
-`apps/myfastapiapp/overlays/local/postgres/postgres-statefulset.yaml`. Both are deployed
-through the same Application.
+`infra-local/database/compose.yaml` in the sibling repository. PostgreSQL is
+provisioned separately; app sync does not upgrade or restart it.
 See [image publishing](#make-the-app-image-available)
 if a failed release skipped image publication.
 
 ## Back up and release a database change
 
-1. Disable auto-sync in the live Application's Argo CD **App Details** and let
-   any active sync finish. Select `staging-myfastapiapp`. The parent
-   ApplicationSet preserves this live pause through `ignoreApplicationDifferences`.
-2. During a quiet window, run the backup script and continue only if it succeeds:
+1. Disable auto-sync on `staging-myfastapiapp` in Argo CD and wait for active
+   syncs/migration Jobs to finish. The ApplicationSet preserves this live pause.
+2. Follow [backup and restore verification](../../../../../infra-local/docs/database.md#backup-and-restore).
+   Run the Compose backup helper from `infra-local`, not the legacy Pod backup
+   helper under `postgres/`. Keep writers paused when the recovery point must
+   preserve every write through the change.
+3. Validate and review before publishing:
 
    ```sh
-   ./apps/myfastapiapp/overlays/local/postgres/backup.sh
-   ```
-
-   The script explicitly targets context `kind-argocd-postgres`, namespace
-   `myfastapiapp`, and database `myfastapiapp`. It uses `pg_dump` and `pg_restore`
-   inside the existing Postgres Pod, so local PostgreSQL tools are unnecessary.
-   It writes a custom-format archive under
-   `$HOME/.local/share/myfastapiapp/backups` with mode `600`, outside Git. It
-   removes incomplete files if the dump or archive read check fails. The read
-   check renders the full archive to `/dev/null` without connecting to a
-   database; it does not test an actual restore. Verify recovery by restoring
-   into a disposable database before relying on a backup. Keep writes paused
-   through verification if recovery must preserve every write since the backup.
-   See [pg_dump](https://www.postgresql.org/docs/17/app-pgdump.html) and
-   [pg_restore](https://www.postgresql.org/docs/17/app-pgrestore.html).
-
-   To select another kind cluster or destination:
-
-   ```sh
-   ./apps/myfastapiapp/overlays/local/postgres/backup.sh argocd-postgres /absolute/path/outside-the-repo/backups
-   ```
-
-3. Validate the app, review the diff, then commit and push the release image
-   selection and any manifest changes together:
-
-   ```sh
-   ./scripts/validate.sh
+   ./scripts/validate.sh --ready
    ./scripts/validate-server.sh myfastapiapp --environment local --context kind-argocd-postgres
+   ./scripts/check-local-database.py --environment local --context kind-argocd-postgres
    git diff --check
    ```
 
-   The [server validation script](../../../../docs/local/validation.md) checks ordinary
-   resource updates and hook creation separately. It preserves the retained
-   migration Job and logs while validating the new release image selection.
+4. Commit/push the release selection, refresh Argo CD and sync the **entire**
+   Application with Prune, Force and Replace off. Selective sync skips hooks.
+   Like AWS, wave `0` runs the migration Job against the existing database;
+   wave `1` rolls out the API only after migration success. No database provisioning
+   happens in this sync. The Job uses the same selected image and Secret as the API.
+5. Run [verification](#verify-the-deployment), including existing login and records,
+   then re-enable automatic sync. The latest migration Job/logs remain until the
+   next sync; Alembic skips already applied revisions.
 
-4. Refresh Argo CD and run a full Application sync, with Force and Replace off.
-   Resource-selective sync skips hooks. Sync waves apply storage at `-2`, wait
-   for Postgres at `-1`, run the migration Job at `0`, and roll out FastAPI at `1`.
-   The Job uses the app's database Secret and the new app image to run
-   `python -m alembic upgrade head`. A failed migration blocks the app rollout.
-   The latest Job and logs remain until the next sync replaces them. Hooks may
-   run again on later syncs; Alembic skips already applied revisions.
-   See [Argo CD sync phases and waves](https://argo-cd.readthedocs.io/en/latest/user-guide/sync-waves/).
-5. Check the Job logs, revision, rollout, and health:
-
-   ```sh
-   kubectl --context kind-argocd-postgres -n myfastapiapp logs job/myfastapiapp-migrate
-   kubectl --context kind-argocd-postgres -n myfastapiapp \
-     rollout status deployment/myfastapiapp-deployment --timeout=180s
-   kubectl --context kind-argocd-postgres -n myfastapiapp \
-     exec deployment/myfastapiapp-deployment -- \
-     python -m alembic current --check-heads
-   curl -fsS http://myfastapiapp.localhost/health
-   curl -fsS http://myfastapiapp.localhost/ready
-   ```
-
-   `current --check-heads` checks the database against the revisions bundled in
-   the running release image and fails if any head is unapplied. Confirm Argo CD
-   shows **Synced / Healthy**, test existing login and registration, then
-   re-enable auto-sync in the UI.
-
-If migration fails, inspect the Job logs before retrying. If migration succeeds
-but the app rollout fails, the database has already changed. Check schema
-compatibility before reverting the app image. Git rollback does not undo
-migrations. Review each revision's downgrade operations for possible data loss.
-
-The [database reset runbook](postgres/reset.md) records the
-historical baseline replacement and its separate reset procedure.
+If migrations succeed but the API fails, the schema has already changed. Review
+compatibility before reverting the app image; Git rollback does not undo migrations.
+For deliberate disposable-data resets, follow the
+[Compose reset procedure](../../../../../infra-local/docs/database.md#deliberately-reset-disposable-app-data).
+The old [Kubernetes reset runbook](postgres/reset.md) is for unmigrated databases only.
 
 ## Recovery after a cluster rebuild
 
-Replacing the Postgres Pod preserves its PVC and laptop data. Deleting the kind
-cluster preserves the laptop directory, but removes Kubernetes objects and
-Secrets. Recreate the cluster with the same storage mount and node label,
-follow the shared [cluster setup](../../../../docs/local/setup.md), provision the same Secrets,
-and make the selected image available before bootstrapping staging again. To adopt
-the shared parent mount, follow the [storage upgrade](../../../../docs/local/repository-upgrade.md#shared-storage-at-the-next-rebuild)
-so the existing data appears at `/mnt/myfastapiapp-postgres` in the new node.
-The node uses label `staging.local/postgres-storage: "true"`, and the PV binds
-to the PVC in namespace `myfastapiapp`.
+The database continues running outside kind, with its Docker volume and roles
+unchanged. Follow [platform rebuild](../../../../../infra-local/docs/rebuild.md),
+recreate the app namespace, app connection Secret, registry/Git credentials and
+selected image, then run the Pod connectivity probe before registration.
+No database directory or storage mount is required for this app on a fresh cluster.
+Existing kind mounts, original data files and legacy Secrets remain preserved
+until their separate retirement is authorized.
 
-Postgres reuses `pgdata`; `POSTGRES_PASSWORD` only initializes a new database.
-Changing that Secret does not rotate an existing database role's password. Keep
-the original password with your recovery information, or explicitly change the
-role password inside Postgres. Keep the database major version pinned when
-reusing its files.
-
-Do not delete the PVC for a rollout. A retained PV can remain `Released` with the
-old claim UID after PVC deletion and require deliberate recovery. PV/PVC retention
-does not protect against deleting the laptop folder or disk failure. Back up
-important data and verify an actual restore. Only one Postgres server may use a
-data directory at a time. See [PV retention](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#retain).
+Database recovery is independent of cluster recreation. Follow
+[backup/restore](../../../../../infra-local/docs/database.md#backup-and-restore)
+and verify actual app behaviour before traffic. Password files only initialize
+empty storage; keep the passwords matching the existing database roles.

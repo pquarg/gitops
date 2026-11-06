@@ -5,10 +5,14 @@ is `argocd-postgres`, context `kind-argocd-postgres`. For an existing cluster,
 follow [repository cutover](../repository-migration.md). Older pre-split installations
 also need [the legacy upgrade guide](repository-upgrade.md).
 
+Existing Kubernetes databases must also follow the [database cutover](database-migration.md)
+before publishing the new local overlay. The current app sync connects to an
+already provisioned database; it does not create PostgreSQL or mount its storage.
+
 ## 1. Prepare the platform with infra-local
 
-Follow [infra-local's README](../../../infra-local/README.md) to configure the kind
-storage parent and localhost port mapping, create the cluster, install Argo CD
+Follow [infra-local's README](../../../infra-local/README.md) to provision separate
+Compose PostgreSQL, configure the kind localhost port mapping, create the cluster, install Argo CD
 and install shared Traefik through Terraform Helm. Its scripts run from that separate repository:
 
 ```sh
@@ -18,7 +22,7 @@ cd ../infra-local
 cd ../gitops
 ```
 
-Create the ignored kind config and storage directory as documented there first.
+Create the ignored kind config and private database settings as documented there first.
 Skip cluster creation for an existing cluster. Do not rebuild or move database
 files merely to consolidate the deployment repositories.
 
@@ -27,12 +31,11 @@ The platform must provide:
 - Argo CD in namespace `argocd`, with Application and ApplicationSet CRDs ready.
 - Shared Traefik in namespace `traefik` and IngressClass `traefik`.
 - `127.0.0.1:80` mapped to Traefik's NodePort `30080`.
-- Laptop storage parent mounted at `/mnt`, with node label
-  `staging.local/postgres-storage: "true"`.
+- A running separate PostgreSQL database reachable from kind Pods at
+  `host.docker.internal:5433` using the restricted app login (Docker Desktop).
 
-App-owned local PVs use `/mnt/<app>-postgres`; create the corresponding host
-subdirectory before first sync. The platform owns the parent mount while each
-app owns its database data, PV/PVC, backup and recovery.
+Fresh clusters need no app database mount. Preserve existing `/mnt` mounts,
+node labels and laptop directories for unmigrated databases and legacy recovery.
 
 ## 2. Connect the deployment Git repository
 
@@ -49,8 +52,9 @@ Git remote is required: its platform configuration is applied from disk.
 
 ## 3. Prepare the apps
 
-Follow each app's README to provision its namespace, database and registry
-Secrets, host storage subdirectory and selected image before automatic sync.
+Follow each app's README to provision its namespace, connection and registry
+Secrets and selected image before automatic sync. Run its Pod-to-database
+connectivity probe before registration.
 Start with [myfastapiapp](../../apps/myfastapiapp/overlays/local/README.md#provision-credentials).
 For more apps, follow [adding apps](adding-apps.md) and
 [registry credentials](credentials.md#registry-authentication).
@@ -80,8 +84,8 @@ kubectl --context kind-argocd-postgres -n argocd get applications
 The script validates first, checks the Argo CD controllers and shared ingress, then applies only
 `staging-root`. The root manages the ApplicationSet in `argocd/local/kustomization.yaml`.
 It discovers every `apps/*/overlays/local` entry point and creates an independent Application,
-including `staging-myfastapiapp` in namespace `myfastapiapp`. Each app applies
-its storage, waits for Postgres, runs migrations and rolls out the API. Traefik
+including `staging-myfastapiapp` in namespace `myfastapiapp`. Each app runs
+migrations against the existing database and rolls out the API. Traefik
 is managed separately by `infra-local`.
 
 Root **Synced** means registration was applied; wait for the app's own
@@ -92,6 +96,16 @@ app Service. Docker Desktop and the cluster must remain running.
 
 ## Recovery
 
+The current Compose database survives kind replacement independently. Follow
+[platform rebuild](../../../infra-local/docs/rebuild.md#rebuild-with-the-external-compose-database)
+and [database backup/restore](../../../infra-local/docs/database.md#backup-and-restore).
+Recreate Kubernetes Secrets/images and verify Pod connectivity before registration;
+verify existing records and login afterward.
+
+**Legacy Kubernetes databases only:** the following retained methods apply to
+the original laptop directory. `--delete-database` does not remove or reset the
+new Compose volume. Never use legacy data removal as part of routine cutover.
+
 For platform replacement, choose [keep the database](../../../infra-local/README.md#method-1-keep-the-database)
 or [destroy the database](../../../infra-local/README.md#method-2-destroy-the-database).
 Both methods recreate Kubernetes objects and Secrets. Retained data needs the
@@ -99,6 +113,12 @@ original database credentials, storage mount and a compatible PostgreSQL major
 version; fresh data may use new matching credentials. Follow each app's recovery
 or removal runbook before resuming traffic. App database releases and recovery
 remain owned by this repository.
+
+For a fresh local database, `infra-local/scripts/teardown-kind.sh --delete-database`
+also calls myfastapiapp's app-owned deletion helper after removing the cluster.
+Preview with `--dry-run` and follow the
+[database removal instructions](../../apps/myfastapiapp/overlays/local/postgres/reset.md#combined-cluster-and-database-teardown).
+Other apps' laptop data is preserved.
 
 The common entry point also accepts `--kubeconfig /absolute/path`. It requires an
 explicit context and uses the same file/context for every Kubernetes command.
