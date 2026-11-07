@@ -10,13 +10,18 @@ Fresh installations skip this page and follow [setup](setup.md). Before publishi
 this overlay change to a remote used by an existing cluster, pause that app's
 automatic sync. Other apps and AWS keep their existing policies and configuration.
 
+Examples use `deployment` / `kind-deployment`. For an older `argocd-postgres`
+cluster, use [existing-cluster selection](../../../infra-local/README.md#existing-clusters)
+and substitute its actual name/context in every command. This cutover does not
+rename or rebuild the cluster.
+
 ## 1. Pause and back up
 
 Confirm the target explicitly:
 
 ```sh
-kubectl --context kind-argocd-postgres get nodes
-kubectl --context kind-argocd-postgres -n argocd patch application staging-myfastapiapp \
+kubectl --context kind-deployment get nodes
+kubectl --context kind-deployment -n argocd patch application staging-myfastapiapp \
   --type merge -p '{"spec":{"syncPolicy":{"automated":{"enabled":false}}}}'
 ```
 
@@ -25,9 +30,9 @@ migration Job finishes. Stop inbound traffic and every writer, including local
 development processes. Then:
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp scale deployment/myfastapiapp-deployment --replicas=0
-kubectl --context kind-argocd-postgres -n myfastapiapp wait --for=delete pod -l app=myfastapiapp-pod --timeout=120s
-./apps/myfastapiapp/overlays/local/postgres/backup.sh argocd-postgres
+kubectl --context kind-deployment -n myfastapiapp scale deployment/myfastapiapp-deployment --replicas=0
+kubectl --context kind-deployment -n myfastapiapp wait --for=delete pod -l app=myfastapiapp-pod --timeout=120s
+./apps/myfastapiapp/overlays/local/postgres/backup.sh deployment
 ```
 
 Record the resulting archive path. Privately preserve the original connection
@@ -62,10 +67,10 @@ Use the Compose app password, URL-encoded, and the configured published port.
 Apply and probe it with the selected release image:
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp apply -f apps/myfastapiapp/overlays/local/app-secrets.yaml
-./scripts/check-local-database.py --environment local --context kind-argocd-postgres
-kubectl --context kind-argocd-postgres -n myfastapiapp scale statefulset/myfastapiapp-postgres-statefulset --replicas=0
-kubectl --context kind-argocd-postgres -n myfastapiapp wait --for=delete pod -l app=myfastapiapp-postgres-pod --timeout=180s
+kubectl --context kind-deployment -n myfastapiapp apply -f apps/myfastapiapp/overlays/local/app-secrets.yaml
+./scripts/check-local-database.py --environment local --context kind-deployment
+kubectl --context kind-deployment -n myfastapiapp scale statefulset/myfastapiapp-postgres-statefulset --replicas=0
+kubectl --context kind-deployment -n myfastapiapp wait --for=delete pod -l app=myfastapiapp-postgres-pod --timeout=180s
 ```
 
 The connectivity check performs and rolls back a small DDL/data transaction. It

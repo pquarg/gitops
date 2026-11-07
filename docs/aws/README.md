@@ -1,4 +1,4 @@
-# Aws deployment
+# AWS deployment
 
 This environment is part of the single GitOps repository. Read the
 [repository overview](../../README.md), then [setup](setup.md).

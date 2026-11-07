@@ -1,6 +1,8 @@
 # Set up AWS deployments
 
 For an existing Argo CD installation, first follow [repository cutover](../repository-migration.md).
+If the root is still named `aws-root`, complete the
+[root handover](../root-application-migration.md) before bootstrap.
 
 For the complete infrastructure-to-public-HTTPS walkthrough, use
 [deploy from start to finish](deploy-from-scratch.md). This page is the shorter
@@ -85,7 +87,7 @@ GitHub and cannot deploy unpushed local changes. Then register the root Applicat
 ./scripts/bootstrap.sh --environment aws --context "$EKS_CONTEXT"
 ```
 
-The root automatically reconciles the ApplicationSet. The ApplicationSet creates
+The `root` Application automatically reconciles the ApplicationSet. The ApplicationSet creates
 `aws-myfastapiapp`, but **does not sync the app automatically**. Root **Synced**
 only confirms its registrations; it does not prove the app is deployed or healthy.
 

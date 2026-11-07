@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   printf 'Usage: %s [cluster] [backup-directory]\n' "${0##*/}"
-  printf 'Defaults: cluster=argocd-postgres; backup-directory=$HOME/.local/share/myfastapiapp/backups\n'
+  printf 'Defaults: cluster=deployment; backup-directory=$HOME/.local/share/myfastapiapp/backups\n'
   printf 'Namespace defaults to myfastapiapp; override with NAMESPACE. Uses the Postgres Pod tools.\n'
 }
 
@@ -23,7 +23,7 @@ if ! command -v kubectl > /dev/null; then
   exit 1
 fi
 
-cluster="${1:-argocd-postgres}"
+cluster="${1:-deployment}"
 context="kind-${cluster}"
 backup_dir="${2:-$HOME/.local/share/myfastapiapp/backups}"
 namespace="${NAMESPACE:-myfastapiapp}"

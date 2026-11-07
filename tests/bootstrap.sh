@@ -19,6 +19,18 @@ if [[ "$*" == *'rollout status'* && "$CASE" == controller ]]; then exit 42; fi
 if [[ "$*" == *'get ingressclass traefik'* && "$CASE" != class ]]; then echo traefik.io/ingress-controller; fi
 if [[ "$*" == *'get ingressclass alb'* && "$CASE" != class ]]; then echo ingress.k8s.aws/alb; fi
 if [[ "$CASE" == legacy && "$*" == *'get pvc '* ]]; then echo pvc/old; fi
+if [[ "$*" == *'get application staging-root aws-root '* ]]; then
+  if [[ "$CASE" == old-local-root ]]; then echo application.argoproj.io/staging-root; fi
+  if [[ "$CASE" == old-aws-root ]]; then echo application.argoproj.io/aws-root; fi
+fi
+if [[ "$*" == *'get application root '* ]]; then
+  if [[ "$CASE" == wrong-root ]]; then echo root:argocd/other; fi
+  if [[ "$CASE" == root-without-path ]]; then echo root:; fi
+  if [[ "$CASE" == existing-root ]]; then
+    if [[ "$*" == *'--context=kind-selected'* ]]; then echo root:argocd/local
+    else echo root:argocd/aws; fi
+  fi
+fi
 FAKE
 chmod +x "$tmp/repo/scripts/validate.sh" "$tmp/bin/kubectl"
 fail() { cat "$tmp/out" >&2; printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -30,12 +42,13 @@ run() {
 for env in local aws; do
   context=selected; root_file=aws.yaml; platform=aws-load-balancer-controller
   if [[ "$env" == local ]]; then context=kind-selected; root_file=staging.yaml; platform=traefik; fi
-  for scenario in success validation controller class; do
+  for scenario in success existing-root validation controller class old-local-root old-aws-root wrong-root root-without-path; do
     run "$scenario" --environment "$env" --context "$context" --kubeconfig '/tmp/selected config'
-    if [[ "$scenario" == success ]]; then
+    if [[ "$scenario" == success || "$scenario" == existing-root ]]; then
       [[ "$result" == 0 ]] || fail "$env success"
       awk 'NR==1 && !/^validate/ {exit 1} /<apply>/ {if (!controller) exit 1; applies++} /rollout/ {controller=1} END {if (applies!=1) exit 1}' "$tmp/log" || fail ordering
       grep -q "root/$root_file>" "$tmp/log" || fail 'wrong environment root'
+      grep -q '<application/root>' "$tmp/log" || fail 'must wait for the root Application'
       grep -q "rollout.*deployment/$platform" "$tmp/log" || fail 'platform readiness missing'
       grep -q "validate --environment $env" "$tmp/log" || fail 'validation environment missing'
       if [[ "$env" == aws ]]; then

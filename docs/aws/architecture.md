@@ -18,7 +18,7 @@ The project separates application development, infrastructure and deployment:
 | `myfastapiapp` | Application development | API code, Dockerfile, Alembic database migrations and release images published to GitHub Container Registry (GHCR) |
 | `infra-aws` | AWS platform provisioning through Terraform | Network, EKS cluster and managed EC2 workers, private RDS PostgreSQL, security groups, Argo CD/controller installations, CloudFront and access-log storage |
 | **`gitops`** | Application deployment on that platform | Kubernetes manifests, Argo CD registrations, release image selection, credential helpers and operational guides |
-| `infra-local` | Local platform provisioning | kind, shared Traefik and Argo CD; local app manifests use this GitOps repository’s local overlay |
+| `infra-local` | Local platform provisioning | kind, shared Traefik, Argo CD and separate Compose PostgreSQL; local app manifests use this GitOps repository’s local overlay |
 
 There are two ownership boundaries within AWS as well. Argo CD manages the
 application's Kubernetes resources. The **AWS Load Balancer Controller** watches
@@ -32,7 +32,7 @@ See the [infrastructure contract](infrastructure.md) for the full handoff.
 
 ```mermaid
 flowchart TD
-    Operator[Operator runs bootstrap-eks.sh] --> Root[aws-root Application]
+    Operator[Operator runs bootstrap-eks.sh] --> Root[root Application]
     Git[gitops on GitHub: main] --> Root
     Root --> Registrations[argocd/aws Kustomization]
     Registrations --> AppSet[aws-apps ApplicationSet]
@@ -48,7 +48,7 @@ flowchart TD
 ```
 
 The registration chain starts at [root/aws.yaml](../../root/aws.yaml). It defines
-the `aws-root` Argo CD Application, which reads `argocd/aws/` from GitHub `main`.
+the `root` Argo CD Application on EKS, which reads `argocd/aws/` from GitHub `main`.
 The root automatically syncs registrations and corrects drift in them.
 
 [argocd/aws/apps.yaml](../../argocd/aws/apps.yaml) defines an **ApplicationSet**, a template
@@ -63,7 +63,7 @@ the checked-in template. Publishing a commit makes it available to Argo CD;
 an operator reviews the diff and starts the app sync.
 
 [scripts/bootstrap-eks.sh](../../scripts/bootstrap-eks.sh) validates the manifests,
-checks the existing platform components and registers `aws-root`. It requires an
+checks the existing platform components and registers `root`. It requires an
 explicit Kubernetes context. It does not provision the platform or start the
 app's manual sync. Argo CD reads the published `main` branch, so local edits must
 be pushed before they can be deployed.

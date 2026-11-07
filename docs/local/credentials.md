@@ -16,7 +16,7 @@ The Deployment references a Kubernetes Secret with these settings:
 
 | Setting | Value |
 | --- | --- |
-| Cluster context | `kind-argocd-postgres` |
+| Cluster context | `kind-deployment` |
 | Secret name | `registry-credentials` |
 | Namespace | The same namespace as the app; `myfastapiapp` in the example below |
 | Secret type | `kubernetes.io/dockerconfigjson` |
@@ -63,13 +63,13 @@ secret = {
 }
 json.dump(secret, sys.stdout)
 ' YOUR_GITHUB_USERNAME myfastapiapp |
-  kubectl --context kind-argocd-postgres apply -f -
+  kubectl --context kind-deployment apply -f -
 ```
 
 To confirm the Secret exists without displaying its credentials:
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp get secret registry-credentials \
+kubectl --context kind-deployment -n myfastapiapp get secret registry-credentials \
   -o 'custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type'
 ```
 

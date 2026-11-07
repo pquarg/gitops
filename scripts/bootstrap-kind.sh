@@ -6,5 +6,5 @@ if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
   exec "$project_root/scripts/bootstrap.sh" --help
 fi
 if (( $# > 1 )); then printf 'Usage: %s [cluster]\n' "${0##*/}" >&2; exit 1; fi
-exec "$project_root/scripts/bootstrap.sh" --environment local --context "kind-${1:-argocd-postgres}" \
+exec "$project_root/scripts/bootstrap.sh" --environment local --context "kind-${1:-deployment}" \
   --kubeconfig "${INFRA_LOCAL_KUBECONFIG:-${KUBECONFIG:-$HOME/.kube/config}}"

@@ -10,7 +10,7 @@ Application code, Dockerfile and Alembic revisions live in the separate
 | Argo CD Application | `aws-myfastapiapp` |
 | Initial image | `ghcr.io/pquarg/myfastapiapp:0.1.12` |
 | Database | Private RDS PostgreSQL, provisioned through `infra-aws` |
-| Public URL | [Swagger / API docs](https://d1dgp19b9ypb8r.cloudfront.net/api/v1/docs/) |
+| Public URL | Read `myfastapiapp_https` from `infra-aws/terraform/edge` after edge provisioning |
 | Origin | Internal ALB `deployment-project-dev-app`, HTTP port 80 |
 
 The app has one replica initially. This is a starting deployment, not a configured
@@ -93,7 +93,7 @@ Complete [cluster setup](../../../../docs/aws/setup.md) and ensure the RDS datab
 role already exist. This learning deployment starts with a fresh database;
 these manifests do not copy local data.
 
-Verify the Ingress frontend group `sg-0e84da2f851551dff` matches
+Verify the frontend group configured in `ingress.yaml` matches
 `terraform -chdir=../infra-aws/terraform/foundation output myfastapiapp_alb_security_group`. The manifest
 uses internal ALB `deployment-project-dev-app`, HTTP port 80, IP targets and
 controller-managed backend rules. The host-independent rule accepts the eventual
@@ -153,21 +153,24 @@ CloudFront after the internal ALB is Active with healthy targets. Then set the
 assigned CloudFront hostname and test:
 
 ```sh
-APP_HOST=d1dgp19b9ypb8r.cloudfront.net
-curl -fsS "https://$APP_HOST/health"
-curl -fsS "https://$APP_HOST/ready"
+APP_URL="$(terraform -chdir=../infra-aws/terraform/edge output -json myfastapiapp_https |
+  python3 -c 'import json, sys; print(json.load(sys.stdin)["url"])')"
+curl -fsS "$APP_URL/health"
+curl -fsS "$APP_URL/ready"
 ```
 
-Open [Swagger](https://d1dgp19b9ypb8r.cloudfront.net/api/v1/docs/), register a test account and
-log in. Confirm authorization, logout, generated links and canonical/slash
-redirects remain correct over HTTPS. Verify the distribution's HTTPS-only viewer
+Open `$APP_URL/api/v1/docs/` in a browser, register a test account and log in.
+Earlier distribution hostnames are retained only in
+[deployment history](../../../../docs/aws/deployment-progress.md); a rebuild may
+assign a different address. Confirm authorization, logout, generated links and
+canonical/slash redirects remain correct over HTTPS. Verify the distribution's HTTPS-only viewer
 policy rejects public HTTP. The origin ALB sees HTTP; proxy-scheme handling must
 be checked before making the public endpoint available to others.
 
 The repeatable public check uses Python 3 only:
 
 ```sh
-python3 scripts/check-public-endpoint.py https://d1dgp19b9ypb8r.cloudfront.net
+python3 scripts/check-public-endpoint.py "$APP_URL"
 ```
 
 Add `--auth` to create one synthetic account and test registration/login/logout

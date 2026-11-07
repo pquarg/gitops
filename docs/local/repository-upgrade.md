@@ -1,320 +1,191 @@
 # Upgrade an existing staging installation
 
-For consolidation from the recent two-repository layout, use the
-[GitOps cutover guide](../repository-migration.md). This page covers older local
-namespace, storage and platform ownership migrations; perform only the applicable steps.
+Use this guide only for older root names, namespaces, mounted databases or
+platform ownership. For the recent deployment-repository consolidation, use
+[repository cutover](../repository-migration.md). Fresh installations use
+[setup](setup.md).
 
-Every app now follows the same convention: `apps/<app>` is discovered by the
-ApplicationSet, Application `staging-<app>` deploys into namespace `<app>`, and
-local database PVs use node label `staging.local/postgres-storage: "true"`.
-The root Application manages only the app-discovery ApplicationSet. Shared
-Traefik and cluster setup belong to the sibling `infra-local` repository.
+Examples use `deployment` / `kind-deployment`. For an older `argocd-postgres`
+cluster, use [existing-cluster selection](../../../infra-local/README.md#existing-clusters)
+and substitute its actual name/context in every command.
 
-Fresh clusters can follow [setup](setup.md). An existing `myfastapiapp` in
-`default` needs the one-time cutover below. Editing Git does not move its PVC,
-Secrets or data. The bootstrap script refuses to register the new configuration
-while the old Application or its PVC still exists.
+The current contract is Application `root` → ApplicationSet
+`staging-apps` → Application `staging-<app>`, with workloads in namespace `<app>`.
+Terraform in `infra-local` owns Argo CD and shared Traefik. The active local app
+overlay connects to separate Compose PostgreSQL; it does not deploy a database,
+PV or PVC. See [database cutover](database-migration.md).
+
+Older versions of this guide assumed the local overlay still included
+`./postgres` and that `infra-local/argocd` could be applied with Kustomize. Those
+assumptions no longer hold. Do not use the current app overlay to recreate a
+legacy PostgreSQL installation or apply `../infra-local/argocd` with kubectl.
+For legacy manifest recovery, use a reviewed revision containing the database
+resources; original checkouts remain privately preserved under the workspace's
+`.repo-backups/`.
+
+## Before any upgrade
+
+Inspect context `kind-deployment`, actual root/child Application sources,
+parents, finalizers and sync policies, both controllers' ownership, app namespaces,
+Secrets, database endpoint, PV/PVC bindings and the live kind mounts. Record Git
+revisions and export configuration/credentials privately outside Git. Check
+existing login, records, readiness and database backup restoration.
+
+Pause affected root/app auto-sync and finish active syncs and migration Jobs
+before changing ownership. Pause ApplicationSet reconciliation when replacing
+child registrations, recording its prior replica count. Stop traffic and all
+writers before a database cutover. Keep the original database files, mount paths,
+credentials and backups until separately authorized retirement. A Git revert
+cannot move storage or restore a changed schema.
+
+The bootstrap guard still rejects `staging-bootstrap`,
+`myfastapiapp-postgres-application` or `default/myfastapiapp-postgres-pvc`. It does
+not perform those migrations for you. Do not bypass it by deleting live storage
+before the data recovery and ownership plan is reviewed.
 
 ## Rename the root Application
 
-The root Application is named `staging-root`. Existing clusters may still have
-`staging-bootstrap`. Kubernetes resource names cannot be changed in place;
-replace only the root registration and preserve its managed resources.
-Complete this rename before starting the namespace migration below.
+The current root is `root`. An installation using `staging-root` follows the
+[root handover](../root-application-migration.md). For an installation still using
+`staging-bootstrap`, replace only that registration and preserve its managed
+resources. Before registering the current root, pause its affected child apps
+and verify they are ready for the current overlay, including the separate
+database. Otherwise the new root can initiate an unintended app cutover.
 
-Pause the old root and wait for any active sync to finish in Argo CD:
+Run from `gitops`. Pause the old root and wait for any active sync to finish:
 
 ```sh
-kubectl --context kind-argocd-postgres -n argocd patch application staging-bootstrap \
+kubectl --context kind-deployment -n argocd patch application staging-bootstrap \
   --type merge -p '{"spec":{"syncPolicy":{"automated":{"enabled":false}}}}'
 ```
 
-Remove its deletion finalizers and delete it without cascading, then register
-the new root. Do not use a cascading deletion in the Argo CD UI:
+Privately preserve the registration, inspect its finalizers and then remove only
+the root registration without cascading deletion:
 
 ```sh
-kubectl --context kind-argocd-postgres -n argocd patch application staging-bootstrap \
+kubectl --context kind-deployment -n argocd patch application staging-bootstrap \
   --type merge -p '{"metadata":{"finalizers":null}}'
-kubectl --context kind-argocd-postgres -n argocd delete application staging-bootstrap \
+kubectl --context kind-deployment -n argocd delete application staging-bootstrap \
   --cascade=orphan
-kubectl --context kind-argocd-postgres -n argocd apply -f root/staging.yaml
-kubectl --context kind-argocd-postgres -n argocd wait \
-  --for=jsonpath='{.status.sync.status}'=Synced application/staging-root --timeout=300s
 ```
 
-The new root adopts the existing registrations. Child Applications, workloads,
-Secrets and storage remain in place. It still deploys the revision published on
-GitHub `main`; renaming the root does not publish local changes. Verify the root
-and child Applications show **Synced / Healthy**.
+Once the required namespace/database and controller ownership work is complete,
+register the published current root using the explicit-environment bootstrap
+command in [setup](setup.md#4-validate-publish-and-register-staging). Restore any
+paused ApplicationSet controller to its recorded replica count first. Root
+Synced confirms registration only; verify the app and its data separately.
 
 ## Move myfastapiapp out of default
 
-This procedure requires downtime. It keeps the PostgreSQL 17 data directory at
-`/mnt/myfastapiapp-postgres`, recreates its Kubernetes storage objects with the
-new binding, and replaces `myfastapiapp-postgres-application` with the generated
-`staging-myfastapiapp`. Keep the app image unchanged during this cutover.
+This needs a maintenance window and a plan for the actual legacy installation.
+The current destination is namespace `myfastapiapp` with an external database;
+copying a namespace or applying the current overlay does not transfer records.
 
-If the root is still named `staging-bootstrap`, complete
-[the root rename](#rename-the-root-application) first. The final bootstrap step
-requires that the old root registration has been removed.
+1. Pause the old root/app and ApplicationSet reconciliation as above. Privately
+   preserve the original connection, PostgreSQL and registry Secrets from
+   `default`. Keep the old app image and PostgreSQL major version recorded.
+2. Stop API/external writers and wait for migration Jobs. Back up the old
+   database from its actual namespace:
 
-Run commands from this repository root in a shell with `set -euo pipefail`.
-Complete steps 1–5 before pushing this change to `main`: Argo CD reads GitHub
-and could otherwise attempt the cutover before storage is ready. Preserve the
-original database password and laptop storage directory throughout.
+   ```sh
+   NAMESPACE=default ./apps/myfastapiapp/overlays/local/postgres/backup.sh deployment
+   ```
 
-### 1. Pause registration and application sync
+   Keep writers stopped. Follow steps 2–3 of the
+   [database cutover](database-migration.md#2-prepare-and-test-the-separate-database)
+   to verify a restore, restore into separate Compose storage, create namespace
+   `myfastapiapp`, and provision its new app connection and registry Secrets.
+   Use `default` for operations on the **old** PostgreSQL workload and
+   `myfastapiapp` for the new app and connectivity probe. Do not copy the old
+   database Service URL into the new app connection Secret.
+3. After the restore and Pod connectivity probe succeed, stop the old database
+   cleanly. Keep its laptop files and original Secrets. Detach
+   `myfastapiapp-postgres-application` without cascading deletion, after checking
+   its parents/finalizers. Review removal of the stopped old API, completed
+   migration Job, ingress and Service so they cannot receive traffic or restart
+   against stale data.
+4. The bootstrap also requires the obsolete `default/myfastapiapp-postgres-pvc`
+   to be absent. Before removing old storage **objects**, verify the actual PV's
+   `Retain` reclaim policy and host path, take private object snapshots, and
+   explicitly review that removal scope. Preserve the retained data directory,
+   mount and original credentials. Do not use `kubectl delete -k` on the current
+   app overlay for this: it no longer includes the old database or storage.
+5. Complete controller adoption and Git source cutover, restore the recorded
+   ApplicationSet replica count, then bootstrap local GitOps. Keep the new app
+   paused until its desired/live diff and connection are reviewed. Perform a
+   full app sync with Prune, Force and Replace off; verify migration logs,
+   readiness, expected records and existing login before restoring traffic and
+   the normal automatic app sync policy.
 
-If `staging-root` already exists, disable its auto-sync and wait for any
-active root sync to finish. If no root Application is registered, skip this
-command:
-
-```sh
-kubectl --context kind-argocd-postgres -n argocd patch application staging-root \
-  --type merge -p '{"spec":{"syncPolicy":{"automated":{"enabled":false}}}}'
-```
-
-Pause the old app, wait for its active sync to finish, and temporarily stop
-ApplicationSet reconciliation. Existing Applications for other apps continue
-running; avoid other registration changes during this maintenance window.
-
-```sh
-kubectl --context kind-argocd-postgres -n argocd patch application \
-  myfastapiapp-postgres-application --type merge \
-  -p '{"spec":{"syncPolicy":{"automated":{"enabled":false}}}}'
-kubectl --context kind-argocd-postgres -n argocd scale \
-  deployment/argocd-applicationset-controller --replicas=0
-kubectl --context kind-argocd-postgres -n argocd wait --for=delete pod \
-  -l app.kubernetes.io/name=argocd-applicationset-controller --timeout=120s
-```
-
-Confirm in Argo CD that both root and old app have no running sync before
-continuing. If a different parent manages the old Application, pause that parent
-as well so it cannot recreate or resume the old app.
-
-### 2. Copy credentials into the app namespace
-
-Create namespace `myfastapiapp` if it does not exist. Copy the three existing
-Secrets directly between namespaces; this command prints only resource names:
-
-```sh
-kubectl --context kind-argocd-postgres create namespace myfastapiapp
-kubectl --context kind-argocd-postgres -n default get secret \
-  myfastapiapp-secrets myfastapiapp-postgres-secrets registry-credentials -o json |
-  python3 -c '
-import json
-import sys
-secrets = json.load(sys.stdin)
-for secret in secrets["items"]:
-    secret["metadata"] = {"name": secret["metadata"]["name"], "namespace": "myfastapiapp"}
-json.dump(secrets, sys.stdout)
-' | kubectl --context kind-argocd-postgres create -f -
-```
-
-If the namespace or any target Secrets already exist, inspect their names and
-types first and deliberately reconcile them with the original credentials.
-Set `metadata.namespace: myfastapiapp` in the two ignored local Secret files
-for future updates. Their passwords and connection URL stay the same: the
-database Service keeps its name in the new namespace.
-
-### 3. Stop writers and back up the database
-
-Stop any external database writers as well as the API. Wait for any migration
-Job to finish, then remove the completed Job so it cannot be restarted against
-the old namespace.
-
-```sh
-kubectl --context kind-argocd-postgres -n default scale \
-  deployment/myfastapiapp-deployment --replicas=0
-kubectl --context kind-argocd-postgres -n default wait --for=delete pod \
-  -l app=myfastapiapp-pod --timeout=120s
-kubectl --context kind-argocd-postgres -n default delete job myfastapiapp-migrate \
-  --ignore-not-found
-NAMESPACE=default ./apps/myfastapiapp/overlays/local/postgres/backup.sh
-```
-
-Record the backup location and verify recovery by restoring into a disposable
-database before continuing. The backup script's archive read check alone does
-not test restoration. Keep writers stopped after this backup.
-
-Shut down PostgreSQL cleanly and wait for its Pod to disappear:
-
-```sh
-kubectl --context kind-argocd-postgres -n default scale \
-  statefulset/myfastapiapp-postgres-statefulset --replicas=0
-kubectl --context kind-argocd-postgres -n default wait --for=delete pod \
-  -l app=myfastapiapp-postgres-pod --timeout=180s
-```
-
-### 4. Release the old registration and storage binding
-
-Remove the old Application without cascading deletion, then remove its stopped
-resources. The updated app Kustomization omits `metadata.namespace`, so the
-explicit `-n default` below selects the old namespaced resources. The PV is
-cluster-scoped. Confirm its reclaim policy is `Retain` before deleting it:
-
-```sh
-kubectl --context kind-argocd-postgres get pv myfastapiapp-postgres-pv \
-  -o 'custom-columns=NAME:.metadata.name,RECLAIM:.spec.persistentVolumeReclaimPolicy,PATH:.spec.local.path,CLAIM:.spec.claimRef.namespace'
-kubectl --context kind-argocd-postgres -n argocd patch application \
-  myfastapiapp-postgres-application --type merge -p '{"metadata":{"finalizers":null}}'
-kubectl --context kind-argocd-postgres -n argocd delete application \
-  myfastapiapp-postgres-application
-kubectl --context kind-argocd-postgres -n default delete -k apps/myfastapiapp/overlays/local \
-  --ignore-not-found --wait=true --timeout=180s
-```
-
-This deletes the old PV/PVC objects and workloads. It keeps the retained local
-data directory and the original Secrets. Do not delete the laptop directory,
-remove its mount, or start another PostgreSQL server against it. Recreating the
-PV allows both its claim namespace and storage node affinity to change without
-patching an existing bound volume.
-
-See [Argo CD non-cascading deletion](https://argo-cd.readthedocs.io/en/stable/user-guide/app_deletion/)
-and [Kubernetes retained volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#retain).
-
-### 5. Label the existing storage node
-
-Add the shared label to the node that already hosts the database directory:
-
-```sh
-kubectl --context kind-argocd-postgres label nodes \
-  -l myfastapiapp.local/postgres-storage=true \
-  staging.local/postgres-storage=true --overwrite
-kubectl --context kind-argocd-postgres get nodes \
-  -l staging.local/postgres-storage=true --show-labels
-```
-
-Confirm the selected node exposes the original data at
-`/mnt/myfastapiapp-postgres/pgdata`. If no node matches the old label, identify
-the actual storage node and label that node explicitly. Update the ignored kind
-config to use the shared label for subsequent rebuilds; the existing mount can
-stay in place until the planned storage upgrade below.
-
-### 6. Publish, bootstrap and verify
-
-Run `./scripts/validate.sh` and `git diff --check`, then review, commit and push
-the configuration. Keep the root paused and ApplicationSet controller stopped
-until the commit is available on `main`. Resume registration:
-
-```sh
-kubectl --context kind-argocd-postgres -n argocd scale \
-  deployment/argocd-applicationset-controller --replicas=1
-./scripts/bootstrap-kind.sh
-```
-
-The bootstrap command applies the root manifest, whose explicit
-`automated.enabled: true` restores root auto-sync after the maintenance pause. The
-ApplicationSet creates `staging-myfastapiapp`; it binds the retained directory
-to the new PVC, starts Postgres, runs migrations and deploys the API.
-Keep the existing ingress path for this namespace cutover. Clusters without the
-direct localhost port mapping can adopt it during the planned rebuild below;
-`infra-local/scripts/setup-ingress-kind.sh` requires that mapping.
-
-Wait for **Synced / Healthy**, then follow the app's
-[verification instructions](../../apps/myfastapiapp/overlays/local/README.md#verify-the-deployment).
-Confirm the PV claim namespace is `myfastapiapp`, existing accounts still work,
-and the expected records remain. Keep the backup and old Secrets until recovery
-is verified. Afterwards, remove the obsolete node label and the two app-specific
-Secrets in `default`; keep `registry-credentials` if another workload uses it.
-
-If verification fails, pause the new Application and root, inspect logs, and
-keep traffic stopped while recovering from the retained data or verified dump.
-Stop the new Postgres before any attempt to resume the old deployment. Returning
-to the old namespace requires recreating its PV/PVC binding and credentials;
-reverting Git alone does not move storage back.
+Do not delete original Secrets or storage files as part of namespace migration.
+If the new database has received writes or migrations, the old database is stale.
+Use the [cutover recovery procedure](database-migration.md#recovery-if-cutover-fails)
+instead of simply restarting the old app. For a deliberate recovery into the
+legacy Kubernetes layout, select compatible manifests and review the PV/PVC
+binding separately; current `main` will not recreate them.
 
 ## Shared storage at the next rebuild
 
-The `infra-local` kind example mounts one laptop parent into `/mnt`. Each app owns a
-`<app>-postgres/` subdirectory. An older cluster with an app-specific mount can
-complete the namespace migration above without changing that mount.
+Fresh clusters using Compose PostgreSQL need no database mount. Existing `/mnt`
+mounts and `/mnt/<app>-postgres` directories remain available for unmigrated apps
+and legacy recovery. Changing Git or kind YAML cannot change a running node's
+mounts or published ports.
 
-During a later planned rebuild:
+Only if a planned rebuild still needs legacy storage, use
+`infra-local/kind/cluster-storage.example.yaml` as the reference. The ordinary
+`cluster.example.yaml` has no database mount or storage label. Preserve existing
+ignored configuration; set the absolute laptop parent, `/mnt`, label
+`staging.local/postgres-storage: "true"` and `127.0.0.1:80` → `30080` mapping.
 
-1. Pause sync, stop writers, back up and verify recovery, then shut down Postgres.
-   Record and preserve the original host directory and database credentials.
-2. With Postgres stopped, copy its complete data directory, including `pgdata`
-   and permissions, into `myfastapiapp-postgres/` under a shared laptop parent
-   such as `$HOME/.local/share/staging/postgres`. Keep the original copy.
-3. In `infra-local`, copy `kind/cluster.example.yaml` to the ignored
-   `kind/cluster.local.yaml`.
-   Set the absolute parent `hostPath`, keep `/mnt`, the shared storage label and
-   the direct `127.0.0.1:80` to `30080` port mapping. Editing YAML does not change
-   an existing cluster. Free port 80, including any old ingress container.
-4. Recreate the cluster using [setup](setup.md), provision Secrets in each app's
-   namespace and verify the original data before resuming traffic.
-
-Afterwards, each new database needs only its subdirectory and app-owned PV/PVC;
-the kind mount stays the same. These repository changes do not rebuild the
-cluster or move data automatically.
+Before any data relocation, stop PostgreSQL and writers, back up and verify
+restoration, and preserve the complete original directory and permissions. Follow
+[legacy platform rebuild](../../../infra-local/docs/rebuild.md#legacy-kubernetes-database-rebuild)
+for the separately authorized cluster replacement. Do not rebuild or relocate
+storage merely to adopt the repository split or external database.
 
 ## Split local infrastructure from app deployment
 
-This split keeps the cluster name, storage paths, chart versions and app
-resources unchanged. It moves kind configuration, shared Traefik registration
-and ingress verification to the independent sibling `infra-local` repository.
-App discovery and all app/database manifests remain here. No live changes are
-made by moving the files; do not delete the cluster or its data to adopt this.
+The current split assigns kind, controllers and Compose PostgreSQL to
+`infra-local`; app definitions, connection Secrets and migration Jobs stay here.
+For an older installation whose root still owns a Traefik Application:
 
-For an existing cluster, first finish any older root rename or namespace
-migration above if still needed. Complete the following during a quiet window:
+1. Preserve existing ignored kind files, host mounts, local Terraform states,
+   Git/registry/database credentials and app maintenance pauses. Inspect actual
+   state and releases before any platform bootstrap.
+2. Connect the published `git@github.com:pquarg/gitops.git` remote in Argo CD and
+   follow [repository cutover](../repository-migration.md), reviewing the local
+   database prerequisite before resuming app sync. Switch existing registration
+   sources in place, then use the root handover if its old name remains. The new
+   root contains only app discovery; keep pruning
+   off so removing its Traefik registration cannot delete controller workloads.
+3. Follow [Terraform adoption](../../../infra-local/docs/terraform.md#adopt-an-existing-installation)
+   to transfer controller ownership. It covers both manifest-based Argo CD and
+   Traefik managed through an Application. Detach the Traefik Application without
+   cascading deletion and adopt/import real Helm releases into
+   `infra-local/terraform/platform`. An import alone cannot convert manifests
+   into a Helm release. Do not re-register the retired Traefik Application.
+4. Review the combined platform plan, then verify controller readiness, Git
+   access, unchanged app identities, localhost routing and retained data/login.
+   Restore recorded sync policies only after verification. Keep original state
+   backups until recovery and the one-owner rule are checked.
 
-1. Ensure the sibling `infra-local` checkout exists. The previous ignored
-   `kind/postgres-config.local.yaml` moves there too, if present. Keep its
-   original host paths. The new platform scripts default to
-   `kind/cluster.local.yaml`; no config is needed just to transfer ownership.
-2. In Argo CD, pause `staging-root` auto-sync and let its active sync finish.
-   Leave the app's deployment unchanged. Pause any other parent that still
-   manages `Application/traefik`.
-3. Connect `git@github.com:pquarg/gitops.git` in Argo CD before switching
-   sources. The root and ApplicationSet now use that URL, matching this repo's
-   actual remote, rather than the old `deploy.git` URL. If a legacy
-   `deploy.git` checkout is still active, retire its root registration; there
-   must be only one parent managing these registrations. Keep the old Git
-   credential until all Applications have switched successfully.
-4. Validate both repositories, review and publish the `gitops` changes
-   to `main` while the root is paused. Preserve any app maintenance pauses.
-5. Transfer the existing Traefik Application without deleting it or its Helm
-   resources. Run from `gitops`:
-
-   ```sh
-   kubectl --context kind-argocd-postgres -n argocd annotate application traefik \
-     argocd.argoproj.io/tracking-id-
-   kubectl --context kind-argocd-postgres -n argocd label application traefik \
-     app.kubernetes.io/instance-
-   kubectl --context kind-argocd-postgres apply -k ../infra-local/argocd
-   ../infra-local/scripts/setup-ingress-kind.sh
-   ```
-
-   The metadata removals clear the old parent's annotation/label tracking.
-   Removing an absent annotation or label is harmless. The Traefik Application
-   retains its name and chart specification; it continues managing the same
-   Helm resources. Its registration is now applied from `infra-local` on
-   platform changes. Do not delete or cascade-prune the Application.
-6. With the deployment commit available on `main`, run
-   `./scripts/bootstrap-kind.sh`. This updates `staging-root`'s source and
-   resumes its auto-sync. The new app-discovery template points generated apps
-   at `gitops.git`; the root no longer manages Traefik. Automatic root
-   pruning remains disabled throughout the transfer.
-7. Verify root and app Applications are **Synced / Healthy**, Traefik is ready,
-   and the app health/readiness endpoints and existing data work. If the root
-   still lists Traefik, check its tracking metadata and refresh the root after
-   confirming its Git source has the split commit.
-
-For a fresh cluster, use [infra-local's setup](../../../infra-local/README.md)
-followed by [deployment setup](setup.md). If the old cluster lacks the required
-port mapping or shared storage mount, plan the separate
-[platform rebuild](../../../infra-local/docs/rebuild.md) after backing up; this
-ownership transfer cannot change existing container mounts or published ports.
+Platform setup reads `infra-local` from disk; no infrastructure Git credential or
+platform Git-watching Application is required. A controller change takes effect
+through a reviewed Terraform apply. App changes require publication to GitOps.
 
 ## Consolidate platform Helm ownership
 
-The earlier repository-split steps above describe the intermediate Traefik
-Application ownership. The current platform now uses one Terraform state for
-both controllers. After finishing any earlier app/namespace/storage transfer,
-follow [infra-local's adoption guide](../../../infra-local/docs/terraform.md#adopt-an-existing-installation)
-to detach the Traefik registration without cascading deletion and adopt its
-running objects into Helm. Do not re-register a Traefik Application after that
-migration. Cluster/data/credentials remain in place. The common deployment
-entry point is `scripts/bootstrap.sh --context kind-argocd-postgres`.
+The active root is `infra-local/terraform/platform`, owning Argo CD and Traefik.
+The old `terraform/argocd` directory is retained only for private state recovery.
+Use the [adoption guide](../../../infra-local/docs/terraform.md#adopt-an-existing-installation)
+for all state/Helm ownership steps; do not initialize or apply the retired root.
+After migration, the app registration entry point is:
+
+```sh
+./scripts/bootstrap.sh --environment local --context kind-deployment
+```
+
+This registers apps on the prepared platform. It neither installs controllers
+nor transfers database records. Configuration checks are separate from successful
+live migration; follow the [app verification](../../apps/myfastapiapp/overlays/local/README.md#verify-the-deployment)
+and [platform adoption acceptance checks](../../../infra-local/docs/terraform.md#recovery-and-validation-limits).

@@ -13,8 +13,8 @@ apps/myfastapiapp/
   overlays/aws/                 # AWS release, configuration, ALB and verified RDS TLS
 argocd/local/                   # staging-apps: discovers apps/*/overlays/local
 argocd/aws/                     # aws-apps: discovers apps/*/overlays/aws
-root/staging.yaml               # Existing staging-root identity, local registrations only
-root/aws.yaml                   # Existing aws-root identity, AWS registrations only
+root/staging.yaml               # root Application on kind, local registrations only
+root/aws.yaml                   # root Application on EKS, AWS registrations only
 scripts/                        # Common validation/bootstrap and credential helpers
 docs/local/                     # Local setup, credentials and legacy recovery
 docs/aws/                       # AWS setup, infrastructure contract and recovery
@@ -25,9 +25,12 @@ docs/aws/                       # AWS setup, infrastructure contract and recover
 Read [the consolidation and cutover guide](docs/repository-migration.md) first.
 The expected remote is `git@github.com:pquarg/gitops.git`. It must be published and
 readable by both Argo CD installations before switching registrations. Local
-edits alone do not change either cluster. Existing Application, namespace,
-workload, PV/PVC and Secret names are preserved by that repository cutover. It
-needs no rebuild or data transfer. Moving local PostgreSQL outside kind is a
+edits alone do not change either cluster. Both clusters now use an Application
+named `root` in namespace `argocd`. Existing `staging-root` or `aws-root`
+registrations need the [root handover](docs/root-application-migration.md);
+bootstrap stops until it is complete. ApplicationSet, app, namespace, workload,
+PV/PVC and Secret names are preserved. The root rename and repository cutover
+need no rebuild or data transfer. Moving local PostgreSQL outside kind is a
 separate [database cutover](docs/local/database-migration.md) with a verified
 dump/restore. Local apps retain automatic self-healing; AWS app sync remains manual.
 
@@ -38,7 +41,7 @@ platform preparation, Git access, app credentials and image availability. On a
 prepared cluster, register only the chosen environment:
 
 ```sh
-./scripts/bootstrap.sh --environment local --context kind-argocd-postgres
+./scripts/bootstrap.sh --environment local --context kind-deployment
 ./scripts/bootstrap.sh --environment aws --context aws-deployment-project
 ```
 

@@ -53,7 +53,7 @@ for env, prefix in [('local', 'staging'), ('aws', 'aws')]:
     root = json.loads(subprocess.check_output(
         ['kubectl', 'patch', '--local', '-f', str(ROOT / 'root' / root_file),
          '--type=merge', '-p', '{}', '-o', 'json'], text=True))
-    assert root['metadata']['name'] == f'{prefix}-root'
+    assert root['metadata']['name'] == 'root'
     assert root['spec']['source']['path'] == f'argocd/{env}'
     assert root['spec']['source']['repoURL'] == generator['repoURL']
     assert appset['spec']['template']['metadata']['name'] == prefix + '-{{index .path.segments 1}}'

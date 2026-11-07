@@ -24,7 +24,7 @@ ALB and targets. Terraform must never import those resources.
 Keep deterministic name `deployment-project-dev-app`, internal IPv4 scheme,
 HTTP port 80, IP targets, `/ready` health check, controller backend-rule management
 and no host-specific rule. Preserve the application name, namespace and image.
-Follow [setup](setup.md) to validate/publish and register `aws-root`, then manually
+Follow [setup](setup.md) to validate/publish and register `root`, then manually
 sync the full app including its migration hook.
 
 ## 3. Verify the origin
@@ -60,9 +60,12 @@ IP; app authentication is still required. No policy upgrade is part of this refa
 
 ## Verify HTTPS, authentication, restrictions and logging
 
-Use the URL in edge's output, after the distribution reaches Deployed:
+Read the URL from the current edge output after the distribution reaches
+Deployed. Run from `gitops`:
 
 ```sh
+APP_URL="$(terraform -chdir=../infra-aws/terraform/edge output -json myfastapiapp_https |
+  python3 -c 'import json, sys; print(json.load(sys.stdin)["url"])')"
 python3 scripts/check-public-endpoint.py "$APP_URL"
 # Separately authorized test-user creation/login/logout check:
 python3 scripts/check-public-endpoint.py "$APP_URL" --auth

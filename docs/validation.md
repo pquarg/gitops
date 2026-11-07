@@ -35,7 +35,7 @@ After provisioning the namespace and cluster CRDs, select the environment and
 context explicitly:
 
 ```sh
-./scripts/validate-server.sh myfastapiapp --environment local --context kind-argocd-postgres
+./scripts/validate-server.sh myfastapiapp --environment local --context kind-deployment
 ./scripts/validate-server.sh myfastapiapp --environment aws --context aws-deployment-project
 ```
 

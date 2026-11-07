@@ -7,6 +7,10 @@ after cutover. The app repository's development Compose database is separate.
 The procedures and deletion helper below are retained for unmigrated storage;
 they do not reset or delete the new deployment Docker volume.
 
+Examples use `deployment` / `kind-deployment`. For an older `argocd-postgres`
+cluster, use [existing-cluster selection](../../../../../../infra-local/README.md#existing-clusters)
+and substitute its actual name/context in every command and deletion confirmation.
+
 This procedure deletes application data in the staging cluster. For ordinary
 schema changes, use the [backup and release workflow](../README.md#back-up-and-release-a-database-change)
 and add new Alembic revisions.
@@ -39,7 +43,7 @@ the remaining steps apply to the Kubernetes database.
 ## Reset the Kubernetes database
 
 Run deployment commands from this deployment repository. The target is context
-`kind-argocd-postgres`, namespace `myfastapiapp`, database `myfastapiapp`, and Argo CD
+`kind-deployment`, namespace `myfastapiapp`, database `myfastapiapp`, and Argo CD
 Application `staging-myfastapiapp`.
 
 PostgreSQL has a retained PV/PVC backed by a laptop directory. Recreating its
@@ -56,7 +60,7 @@ Secrets.
 2. Disable auto-sync on the live Application and let any active sync finish:
 
    ```sh
-   kubectl --context kind-argocd-postgres -n argocd patch application \
+   kubectl --context kind-deployment -n argocd patch application \
      staging-myfastapiapp --type merge \
      -p '{"spec":{"syncPolicy":{"automated":{"enabled":false}}}}'
    ```
@@ -68,9 +72,9 @@ Secrets.
 3. Stop the API and wait for its Pods to disappear:
 
    ```sh
-   kubectl --context kind-argocd-postgres -n myfastapiapp scale \
+   kubectl --context kind-deployment -n myfastapiapp scale \
      deployment/myfastapiapp-deployment --replicas=0
-   kubectl --context kind-argocd-postgres -n myfastapiapp wait \
+   kubectl --context kind-deployment -n myfastapiapp wait \
      --for=delete pod -l app=myfastapiapp-pod --timeout=120s
    ```
 
@@ -78,7 +82,7 @@ Secrets.
    schema, including accounts, sessions, and migration version tables:
 
    ```sh
-   kubectl --context kind-argocd-postgres -n myfastapiapp exec \
+   kubectl --context kind-deployment -n myfastapiapp exec \
      myfastapiapp-postgres-statefulset-0 -c postgres -- \
      psql -X -v ON_ERROR_STOP=1 --single-transaction \
      -U myfastapiapp -d myfastapiapp \
@@ -93,10 +97,10 @@ Secrets.
 6. Verify migration completion, rollout, and database revision:
 
    ```sh
-   kubectl --context kind-argocd-postgres -n myfastapiapp logs job/myfastapiapp-migrate
-   kubectl --context kind-argocd-postgres -n myfastapiapp rollout status \
+   kubectl --context kind-deployment -n myfastapiapp logs job/myfastapiapp-migrate
+   kubectl --context kind-deployment -n myfastapiapp rollout status \
      deployment/myfastapiapp-deployment --timeout=180s
-   kubectl --context kind-argocd-postgres -n myfastapiapp exec \
+   kubectl --context kind-deployment -n myfastapiapp exec \
      deployment/myfastapiapp-deployment -- \
      python -m alembic current --check-heads
    curl -fsS http://myfastapiapp.localhost/health
@@ -110,7 +114,7 @@ Secrets.
 7. Re-enable automatic sync after verification:
 
    ```sh
-   kubectl --context kind-argocd-postgres -n argocd patch application \
+   kubectl --context kind-deployment -n argocd patch application \
      staging-myfastapiapp --type merge \
      -p '{"spec":{"syncPolicy":{"automated":{"enabled":true}}}}'
    ```
@@ -141,7 +145,7 @@ It requires Python 3 and this sibling `gitops` checkout. Complete platform
 preparation first, retaining a verified database backup if you may need the
 data. The wrapper discovers the actual host path from the running kind nodes'
 Docker mounts and displays it before asking for
-`delete argocd-postgres and database`. It records that path privately with its
+`delete deployment and database`. It records that path privately with its
 Secrets/state backup. It does not infer deletion paths from edited kind YAML.
 
 The [deletion helper](delete-data.py) accepts only an absolute path ending in
@@ -157,7 +161,7 @@ If only file cleanup fails after cluster deletion, inspect the recorded
 
 ```sh
 python3 apps/myfastapiapp/overlays/local/postgres/delete-data.py \
-  --cluster argocd-postgres \
+  --cluster deployment \
   --data-directory '/absolute/storage/parent/myfastapiapp-postgres/pgdata' --dry-run
 ```
 
@@ -171,7 +175,7 @@ Return to platform startup only after cleanup completes.
 
 1. Complete [platform preparation and clean shutdown](../../../../../../infra-local/docs/rebuild.md#prepare-for-either-method),
    retaining a verified backup if you may need the data later. Delete the
-   `argocd-postgres` cluster as documented there. Confirm no other PostgreSQL
+   `deployment` cluster as documented there. Confirm no other PostgreSQL
    server or container is using this data directory. Do not remove files while
    PostgreSQL is running.
 2. Read the absolute `hostPath` mounted at `/mnt` in

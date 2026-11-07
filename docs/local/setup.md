@@ -1,19 +1,18 @@
 # Set up local app deployment
 
 Run commands from `gitops` unless stated otherwise. The default cluster
-is `argocd-postgres`, context `kind-argocd-postgres`. For an existing cluster,
+is `deployment`, context `kind-deployment`. For an existing cluster,
 follow [repository cutover](../repository-migration.md). Older pre-split installations
 also need [the legacy upgrade guide](repository-upgrade.md).
+An older `argocd-postgres` cluster keeps context `kind-argocd-postgres`; use
+[existing-cluster selection](../../../infra-local/README.md#existing-clusters)
+and substitute its name/context throughout these steps.
+If the root is still named `staging-root`, complete the
+[root handover](../root-application-migration.md) before bootstrap.
 
 Existing Kubernetes databases must also follow the [database cutover](database-migration.md)
 before publishing the new local overlay. The current app sync connects to an
 already provisioned database; it does not create PostgreSQL or mount its storage.
-
-For the complete fresh/local Compose workflow, the sibling infrastructure checkout
-provides `../infra-local/scripts/setup-local.sh`. It runs the steps below in order,
-including credentials, a local image build/load and deployment verification. See
-[the setup entry point](../../../infra-local/docs/setup-local.md). The individual
-commands below remain useful for manual setup and recovery.
 
 ## 1. Prepare the platform with infra-local
 
@@ -83,12 +82,12 @@ it cannot deploy files that exist only in this checkout. With the platform and
 credentials ready:
 
 ```sh
-./scripts/bootstrap.sh --environment local --context kind-argocd-postgres
-kubectl --context kind-argocd-postgres -n argocd get applications
+./scripts/bootstrap.sh --environment local --context kind-deployment
+kubectl --context kind-deployment -n argocd get applications
 ```
 
 The script validates first, checks the Argo CD controllers and shared ingress, then applies only
-`staging-root`. The root manages the ApplicationSet in `argocd/local/kustomization.yaml`.
+`root`. The root manages the ApplicationSet in `argocd/local/kustomization.yaml`.
 It discovers every `apps/*/overlays/local` entry point and creates an independent Application,
 including `staging-myfastapiapp` in namespace `myfastapiapp`. Each app runs
 migrations against the existing database and rolls out the API. Traefik
@@ -120,10 +119,12 @@ version; fresh data may use new matching credentials. Follow each app's recovery
 or removal runbook before resuming traffic. App database releases and recovery
 remain owned by this repository.
 
-For a fresh local database, `infra-local/scripts/teardown-kind.sh --delete-database`
-also calls myfastapiapp's app-owned deletion helper after removing the cluster.
+For deliberate removal of legacy laptop database files,
+`infra-local/scripts/teardown-kind.sh --delete-database` calls myfastapiapp's
+app-owned deletion helper after removing the cluster. It requires a live cluster
+with the original storage mount; it cannot reset a fresh Compose database.
 Preview with `--dry-run` and follow the
-[database removal instructions](../../apps/myfastapiapp/overlays/local/postgres/reset.md#combined-cluster-and-database-teardown).
+[legacy database removal instructions](../../apps/myfastapiapp/overlays/local/postgres/reset.md#combined-cluster-and-database-teardown).
 Other apps' laptop data is preserved.
 
 The common entry point also accepts `--kubeconfig /absolute/path`. It requires an

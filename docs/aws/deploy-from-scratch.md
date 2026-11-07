@@ -56,7 +56,9 @@ terraform -chdir=../infra-aws/terraform/platform apply stage.tfplan
 
 Add `--kubeconfig /absolute/file` to the AWS update-kubeconfig and stage command
 when selecting another file, and every subsequent Kubernetes/bootstrap command.
-The checker verifies the endpoint matches EKS and Pod Identity prerequisites are
+The database and registry Python helpers accept a context but no `--kubeconfig`
+option; select the same single file through `KUBECONFIG=/absolute/file` when
+invoking those helpers. The checker verifies the endpoint matches EKS and Pod Identity prerequisites are
 available. Platform installs pinned Argo CD and load balancer controller releases.
 Their pins/values live in `../infra-aws/argocd/` and
 `../infra-aws/load-balancer-controller/`. Platform uses AWS token-based Helm auth;
@@ -93,7 +95,8 @@ git diff --check
 ```
 
 The bootstrap validates first, verifies CRDs/controllers/IngressClass and applies
-only the existing `aws-root` registration. `bootstrap-eks.sh CONTEXT` remains a
+only the `root` registration. Existing `aws-root` installations first need the
+[root handover](../root-application-migration.md). `bootstrap-eks.sh CONTEXT` remains a
 compatibility wrapper. Root Synced confirms registration, not app health or
 migration success. App `aws-myfastapiapp` remains **manually synced**. Perform a
 full sync with Force/Replace off so its migration hook runs; verify logs, Alembic

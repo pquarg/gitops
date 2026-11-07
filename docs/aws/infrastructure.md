@@ -5,15 +5,16 @@ Each resource has one manager. This repository does not provision EKS or RDS.
 
 | Owner | Resources |
 | --- | --- |
-| Terraform foundation/edge in `infra-aws` | VPC, subnets, routes, frontend security group, EKS, managed EC2 node groups, private RDS, and the planned CloudFront VPC origin/distribution |
-| Terraform platform in `infra-aws/terraform/platform` | Argo CD installation and AWS Load Balancer Controller installation, including its AWS permissions and `alb` IngressClass |
+| Terraform foundation in `infra-aws/terraform/foundation` | VPC, subnets, routes, frontend security group, EKS, managed EC2 node groups, private RDS, and controller IAM/Pod Identity permissions |
+| Terraform platform in `infra-aws/terraform/platform` | Argo CD and AWS Load Balancer Controller Helm installations, including the `alb` IngressClass |
+| Terraform edge in `infra-aws/terraform/edge` | CloudFront VPC origin/distribution, functions, response headers and access-log delivery/storage |
 | Argo CD from `gitops` | ApplicationSet, app Deployment, Service, ConfigMaps, migration Job and Ingress |
 | AWS Load Balancer Controller | ALBs, target groups and related resources reconciled from Ingress resources |
 | Separate credential provisioning | Argo CD Git access, app database Secret and GHCR pull Secret |
 
 Terraform must not also manage ALBs or target groups created by the controller,
-or app resources managed by Argo CD. Choose pinned Argo CD and controller releases
-when building `infra-aws`; this repo expects their CRDs to be installed first.
+or app resources managed by Argo CD. Use the controller/chart pins already
+selected in `infra-aws`; this repo expects their CRDs to be installed first.
 
 ## Required infrastructure
 

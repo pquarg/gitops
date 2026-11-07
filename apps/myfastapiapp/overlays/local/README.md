@@ -5,11 +5,16 @@ Run commands from `gitops`. Source, image builds and Alembic revisions live in
 
 | Setting | Value |
 | --- | --- |
-| Cluster context | `kind-argocd-postgres` |
+| Cluster context | `kind-deployment` |
 | Namespace | `myfastapiapp` |
 | Argo CD Application | `staging-myfastapiapp` |
 | URL | http://myfastapiapp.localhost/api/v1/docs/ |
 | Database endpoint from Pods | `host.docker.internal:5433` (Docker Desktop) |
+
+For an older `argocd-postgres` cluster, use
+[existing-cluster selection](../../../../../infra-local/README.md#existing-clusters)
+and substitute `argocd-postgres` / `kind-argocd-postgres` in all kind and
+Kubernetes commands below.
 
 The local and AWS overlays use the same API Deployment and migration Job. Both
 connect to an already provisioned external PostgreSQL database through
@@ -33,7 +38,7 @@ Secrets in namespace `myfastapiapp`:
 | GitHub package token, entered interactively | `registry-credentials` |
 
 ```sh
-kubectl --context kind-argocd-postgres create namespace myfastapiapp
+kubectl --context kind-deployment create namespace myfastapiapp
 cp -n apps/myfastapiapp/overlays/local/app-secrets.example.yaml apps/myfastapiapp/overlays/local/app-secrets.yaml
 chmod 600 apps/myfastapiapp/overlays/local/app-secrets.yaml
 git check-ignore apps/myfastapiapp/overlays/local/app-secrets.yaml
@@ -50,7 +55,7 @@ This endpoint is for kind Pods on Docker Desktop; host clients use localhost.
 Local TLS is disabled; AWS retains verified TLS and its RDS CA mounts.
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp apply -f apps/myfastapiapp/overlays/local/app-secrets.yaml
+kubectl --context kind-deployment -n myfastapiapp apply -f apps/myfastapiapp/overlays/local/app-secrets.yaml
 ```
 
 Create `registry-credentials` using the shared [registry instructions](../../../../docs/local/credentials.md#registry-authentication).
@@ -58,7 +63,7 @@ Make the selected image available as below, then check the actual Pod-to-databas
 path before registering or syncing the app:
 
 ```sh
-./scripts/check-local-database.py --environment local --context kind-argocd-postgres
+./scripts/check-local-database.py --environment local --context kind-deployment
 ```
 
 This temporary Job uses the selected app image and connection Secret, verifies
@@ -73,8 +78,8 @@ Apply edited connection Secrets with the command above. Environment variables do
 not refresh in running Pods. Restart the API through Argo CD or explicitly:
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp rollout restart deployment/myfastapiapp-deployment
-kubectl --context kind-argocd-postgres -n myfastapiapp rollout status deployment/myfastapiapp-deployment --timeout=180s
+kubectl --context kind-deployment -n myfastapiapp rollout restart deployment/myfastapiapp-deployment
+kubectl --context kind-deployment -n myfastapiapp rollout status deployment/myfastapiapp-deployment --timeout=180s
 ```
 
 Changing a password file or Kubernetes Secret does not rotate an existing database
@@ -102,7 +107,7 @@ For a local build instead, load the exact selected image into kind:
 APP_IMAGE="$(kubectl kustomize apps/myfastapiapp/overlays/local |
   awk '$1 == "image:" && $2 ~ /myfastapiapp:/ { image = $2 } END { print image }')"
 docker build --provenance=false -t "$APP_IMAGE" ../apps/myfastapiapp
-kind load docker-image "$APP_IMAGE" --name argocd-postgres
+kind load docker-image "$APP_IMAGE" --name deployment
 ```
 
 Use a new image tag for every code release. `IfNotPresent` can reuse a previously
@@ -115,9 +120,9 @@ After [bootstrap](../../../../docs/local/setup.md#4-validate-publish-and-registe
 wait for app sync and migration completion. Then:
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp logs job/myfastapiapp-migrate
-kubectl --context kind-argocd-postgres -n myfastapiapp rollout status deployment/myfastapiapp-deployment --timeout=300s
-kubectl --context kind-argocd-postgres -n myfastapiapp exec deployment/myfastapiapp-deployment -- python -m alembic current --check-heads
+kubectl --context kind-deployment -n myfastapiapp logs job/myfastapiapp-migrate
+kubectl --context kind-deployment -n myfastapiapp rollout status deployment/myfastapiapp-deployment --timeout=300s
+kubectl --context kind-deployment -n myfastapiapp exec deployment/myfastapiapp-deployment -- python -m alembic current --check-heads
 curl -fsS http://myfastapiapp.localhost/health
 curl -fsS http://myfastapiapp.localhost/ready
 ```
@@ -133,7 +138,7 @@ The route is localhost port 80 → kind node port 30080 → shared Traefik → a
 Service → FastAPI. For a direct diagnostic connection:
 
 ```sh
-kubectl --context kind-argocd-postgres -n myfastapiapp port-forward service/myfastapiapp-service 18000:80
+kubectl --context kind-deployment -n myfastapiapp port-forward service/myfastapiapp-service 18000:80
 ```
 
 Open http://localhost:18000/api/v1/docs/. Inspect migration logs and Pod events
@@ -142,7 +147,7 @@ if rollout fails.
 ## Release
 
 1. Build and publish a new image from the app repository, or build and load it
-   into `argocd-postgres` for local use. Keep the app version and lockfile in sync.
+   into `deployment` for local use. Keep the app version and lockfile in sync.
 2. Update `images[].newTag` in
    `apps/myfastapiapp/overlays/local/kustomization.yaml`. This selects the same
    release for the API and migration Job. This is the only deployment image
@@ -171,8 +176,8 @@ if a failed release skipped image publication.
 
    ```sh
    ./scripts/validate.sh --ready
-   ./scripts/validate-server.sh myfastapiapp --environment local --context kind-argocd-postgres
-   ./scripts/check-local-database.py --environment local --context kind-argocd-postgres
+   ./scripts/validate-server.sh myfastapiapp --environment local --context kind-deployment
+   ./scripts/check-local-database.py --environment local --context kind-deployment
    git diff --check
    ```
 

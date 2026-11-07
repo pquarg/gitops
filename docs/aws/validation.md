@@ -1,4 +1,4 @@
-# Validate aws deployments
+# Validate AWS deployments
 
 Use the [common validation guide](../validation.md) for prerequisites and check limits.
 
