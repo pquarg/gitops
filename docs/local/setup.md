@@ -1,35 +1,30 @@
 # Set up local app deployment
 
-Run commands from `gitops` unless stated otherwise. The default cluster
-is `deployment`, context `kind-deployment`. For an existing cluster,
-follow [repository cutover](../repository-migration.md). Older pre-split installations
-also need [the legacy upgrade guide](repository-upgrade.md).
-An older `argocd-postgres` cluster keeps context `kind-argocd-postgres`; use
-[existing-cluster selection](../../../infra-local/README.md#existing-clusters)
-and substitute its name/context throughout these steps.
-If the root is still named `staging-root`, complete the
-[root handover](../root-application-migration.md) before bootstrap.
-
-Existing Kubernetes databases must also follow the [database cutover](database-migration.md)
-before publishing the new local overlay. The current app sync connects to an
-already provisioned database; it does not create PostgreSQL or mount its storage.
+Run commands from `gitops` unless stated otherwise. The default cluster is
+`deployment`, context `kind-deployment`. App sync connects to a separately
+provisioned Compose database; it does not create PostgreSQL or mount storage.
 
 ## 1. Prepare the platform with infra-local
 
 Follow [infra-local's README](../../../infra-local/README.md) to provision separate
 Compose PostgreSQL, configure the kind localhost port mapping, create the cluster, install Argo CD
-and install shared Traefik through Terraform Helm. Its scripts run from that separate repository:
+and install shared Traefik through Terraform Helm. Complete its database first
+setup and create the ignored kind configuration before running its platform
+scripts. Skip cluster creation for an existing cluster. From `gitops`, switch
+to `infra-local` for these commands, then return:
 
 ```sh
 cd ../infra-local
+./scripts/local-database.sh up
+./scripts/local-database.sh status
 ./scripts/create-cluster.sh
 ./scripts/bootstrap-kind.sh
 cd ../gitops
 ```
 
-Create the ignored kind config and private database settings as documented there first.
-Skip cluster creation for an existing cluster. Do not rebuild or move database
-files merely to consolidate the deployment repositories.
+Expect PostgreSQL to be healthy before continuing. If `database/.env` or its
+password files are missing, follow [database first setup](../../../infra-local/docs/database.md#first-setup).
+Installing Argo CD does not create those files or start PostgreSQL.
 
 The platform must provide:
 
@@ -39,8 +34,7 @@ The platform must provide:
 - A running separate PostgreSQL database reachable from kind Pods at
   `host.docker.internal:5433` using the restricted app login (Docker Desktop).
 
-Fresh clusters need no app database mount. Preserve existing `/mnt` mounts,
-node labels and laptop directories for unmigrated databases and legacy recovery.
+The cluster needs no app database mount or storage node label.
 
 ## 2. Connect the deployment Git repository
 
@@ -61,8 +55,25 @@ Follow each app's README to provision its namespace, connection and registry
 Secrets and selected image before automatic sync. Run its Pod-to-database
 connectivity probe before registration.
 Start with [myfastapiapp](../../apps/myfastapiapp/overlays/local/README.md#provision-credentials).
-For more apps, follow [adding apps](adding-apps.md) and
+For more apps, follow [adding apps](../adding-apps.md) and
 [registry credentials](credentials.md#registry-authentication).
+
+For `myfastapiapp`, complete these checks in order before bootstrap:
+
+1. Create namespace `myfastapiapp` if it does not exist.
+2. Configure `registry-credentials` with the [interactive helper](credentials.md#registry-authentication)
+   and a classic GitHub PAT with `read:packages`.
+3. Apply `myfastapiapp-secrets` using the existing Compose **app** password
+   and `host.docker.internal:5433`, as shown in the app runbook.
+4. Make the selected image available and run
+   `./scripts/check-local-database.py --environment local --context kind-deployment`.
+   Continue only after it prints
+   `Database connectivity, app privileges and transactional DDL passed.`
+
+A `secret/... created` message confirms storage of a Secret, not that its
+credentials work. A `job.batch/... created` message confirms submission of the
+probe, not a successful database connection. If it appears to hang, use
+[probe troubleshooting](../../apps/myfastapiapp/overlays/local/README.md#troubleshoot-the-first-sync).
 
 The same release image is used for the API and its migration Job. Build and
 publish it, or load that exact image into the local kind cluster. Database
@@ -70,16 +81,17 @@ credentials and filled Secret files stay outside Git and Kustomize.
 
 ## 4. Validate, publish and register staging
 
-Install the [validation tools](validation.md), then run:
+Install the [validation tools](../validation.md), then run:
 
 ```sh
 ./scripts/validate.sh
 git diff --check
 ```
 
-Review, commit and push the deployment changes. Argo CD reads GitHub `main`;
-it cannot deploy files that exist only in this checkout. With the platform and
-credentials ready:
+Review, commit and push any manifest changes. Keep filled Secrets ignored;
+applying or rotating credentials does not require committing them.
+Argo CD reads GitHub `main`; it cannot deploy manifests that exist only in this
+checkout. With the platform and credentials ready:
 
 ```sh
 ./scripts/bootstrap.sh --environment local --context kind-deployment
@@ -107,27 +119,6 @@ and [database backup/restore](../../../infra-local/docs/database.md#backup-and-r
 Recreate Kubernetes Secrets/images and verify Pod connectivity before registration;
 verify existing records and login afterward.
 
-**Legacy Kubernetes databases only:** the following retained methods apply to
-the original laptop directory. `--delete-database` does not remove or reset the
-new Compose volume. Never use legacy data removal as part of routine cutover.
-
-For platform replacement, choose [keep the database](../../../infra-local/README.md#method-1-keep-the-database)
-or [destroy the database](../../../infra-local/README.md#method-2-destroy-the-database).
-Both methods recreate Kubernetes objects and Secrets. Retained data needs the
-original database credentials, storage mount and a compatible PostgreSQL major
-version; fresh data may use new matching credentials. Follow each app's recovery
-or removal runbook before resuming traffic. App database releases and recovery
-remain owned by this repository.
-
-For deliberate removal of legacy laptop database files,
-`infra-local/scripts/teardown-kind.sh --delete-database` calls myfastapiapp's
-app-owned deletion helper after removing the cluster. It requires a live cluster
-with the original storage mount; it cannot reset a fresh Compose database.
-Preview with `--dry-run` and follow the
-[legacy database removal instructions](../../apps/myfastapiapp/overlays/local/postgres/reset.md#combined-cluster-and-database-teardown).
-Other apps' laptop data is preserved.
-
 The common entry point also accepts `--kubeconfig /absolute/path`. It requires an
 explicit context and uses the same file/context for every Kubernetes command.
-`scripts/bootstrap-kind.sh [cluster]` remains a compatibility wrapper. Shared
-Traefik is a Terraform Helm release; Argo CD reconciles application resources.
+Shared Traefik is a Terraform Helm release; Argo CD reconciles application resources.

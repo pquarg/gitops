@@ -48,25 +48,10 @@ kube=(kubectl "--kubeconfig=$kubeconfig" "--context=$context")
 "${kube[@]}" get nodes > /dev/null
 "${kube[@]}" -n argocd wait --for=condition=Established \
   crd/applications.argoproj.io crd/applicationsets.argoproj.io --timeout=120s
-old_roots="$("${kube[@]}" -n argocd get application staging-root aws-root --ignore-not-found -o name)"
-if [[ -n "$old_roots" ]]; then
-  printf 'Error: migrate the old root registration using docs/root-application-migration.md first.\n' >&2
-  exit 1
-fi
 registered_root="$("${kube[@]}" -n argocd get application "$root_name" --ignore-not-found -o jsonpath='{.metadata.name}:{.spec.source.path}')"
 if [[ -n "$registered_root" && "$registered_root" != "$root_name:argocd/$environment" ]]; then
   printf 'Error: existing root does not use argocd/%s; inspect it before registration.\n' "$environment" >&2
   exit 1
-fi
-if [[ "$environment" == local ]]; then
-  # Prevent discovery from starting a second Postgres against retained data.
-  legacy_application="$("${kube[@]}" -n argocd get application myfastapiapp-postgres-application --ignore-not-found -o name)"
-  legacy_claim="$("${kube[@]}" --namespace=default get pvc myfastapiapp-postgres-pvc --ignore-not-found -o name)"
-  legacy_root="$("${kube[@]}" -n argocd get application staging-bootstrap --ignore-not-found -o name)"
-  if [[ -n "$legacy_application" || -n "$legacy_claim" || -n "$legacy_root" ]]; then
-    printf 'Error: complete the legacy namespace/root migration in docs/local/repository-upgrade.md first.\n' >&2
-    exit 1
-  fi
 fi
 for deployment in argocd-server argocd-repo-server argocd-applicationset-controller; do
   "${kube[@]}" -n argocd rollout status "deployment/$deployment" --timeout=300s

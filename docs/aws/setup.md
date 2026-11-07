@@ -1,17 +1,8 @@
 # Set up AWS deployments
 
-For an existing Argo CD installation, first follow [repository cutover](../repository-migration.md).
-If the root is still named `aws-root`, complete the
-[root handover](../root-application-migration.md) before bootstrap.
-
 For the complete infrastructure-to-public-HTTPS walkthrough, use
 [deploy from start to finish](deploy-from-scratch.md). This page is the shorter
 cluster/application setup reference. For removal, use [teardown](teardown.md).
-
-For existing installations, complete the [stage state transfer](../../../infra-aws/docs/state-migration.md)
-before applying the refactored infrastructure. Historical deployment evidence is
-kept in [deployment history](deployment-progress.md); inspect the live target
-again instead of assuming those results still describe it.
 
 Run commands from this repository root. Install AWS CLI v2, kubectl, Python 3,
 and the [validation tools](validation.md). Complete the
@@ -53,8 +44,7 @@ kubectl --context "$EKS_CONTEXT" -n argocd \
 
 Open https://localhost:8081 and use the administrator credentials established by
 the Argo CD installation. Configure a read-only repository connection to
-`git@github.com:pquarg/gitops.git` in the `default` project. A key scoped to either former
-deployment repository may not have access to GitOps. Keep SSH host verification
+`git@github.com:pquarg/gitops.git` in the `default` project. Keep SSH host verification
 enabled and provision the private key outside Git. See
 [Argo CD private repositories](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/).
 
@@ -107,5 +97,4 @@ For a disposable environment, plan cleanup in `infra-aws` and confirm what data 
 be retained before destroying resources.
 
 The common entry point accepts `--kubeconfig /absolute/file` and requires an
-explicit context. `scripts/bootstrap-eks.sh CONTEXT` remains a compatibility
-wrapper. All Kubernetes commands use the selected file/context consistently.
+explicit context. All Kubernetes commands use the selected file/context consistently.

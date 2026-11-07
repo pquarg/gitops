@@ -16,29 +16,27 @@ argocd/aws/                     # aws-apps: discovers apps/*/overlays/aws
 root/staging.yaml               # root Application on kind, local registrations only
 root/aws.yaml                   # root Application on EKS, AWS registrations only
 scripts/                        # Common validation/bootstrap and credential helpers
-docs/local/                     # Local setup, credentials and legacy recovery
+docs/local/                     # Local setup, credentials and recovery
 docs/aws/                       # AWS setup, infrastructure contract and recovery
 ```
 
-## Existing installations
-
-Read [the consolidation and cutover guide](docs/repository-migration.md) first.
-The expected remote is `git@github.com:pquarg/gitops.git`. It must be published and
-readable by both Argo CD installations before switching registrations. Local
-edits alone do not change either cluster. Both clusters now use an Application
-named `root` in namespace `argocd`. Existing `staging-root` or `aws-root`
-registrations need the [root handover](docs/root-application-migration.md);
-bootstrap stops until it is complete. ApplicationSet, app, namespace, workload,
-PV/PVC and Secret names are preserved. The root rename and repository cutover
-need no rebuild or data transfer. Moving local PostgreSQL outside kind is a
-separate [database cutover](docs/local/database-migration.md) with a verified
-dump/restore. Local apps retain automatic self-healing; AWS app sync remains manual.
+Both clusters use Application `root` in namespace `argocd`. The expected remote
+is `git@github.com:pquarg/gitops.git`; publish it and configure read access in
+Argo CD before registration. Local apps sync automatically; AWS apps sync manually.
 
 ## Set up an environment
 
 Follow [local setup](docs/local/setup.md) or [AWS setup](docs/aws/setup.md), including
-platform preparation, Git access, app credentials and image availability. On a
-prepared cluster, register only the chosen environment:
+platform preparation, Git access, app credentials and image availability.
+
+For local setup, finish the [app prerequisites](docs/local/setup.md#3-prepare-the-apps)
+before registration: healthy Compose PostgreSQL, both app Secrets and a passing
+Pod database probe. Argo CD's Git credential does not authenticate GHCR image
+pulls. Use the
+[first-sync troubleshooting](apps/myfastapiapp/overlays/local/README.md#troubleshoot-the-first-sync)
+if a migration or image pull is blocked.
+
+On a prepared cluster, register only the chosen environment:
 
 ```sh
 ./scripts/bootstrap.sh --environment local --context kind-deployment
@@ -46,9 +44,8 @@ prepared cluster, register only the chosen environment:
 ```
 
 These commands target separate clusters; run the one you intend to configure.
-`--kubeconfig /absolute/file` selects one kubeconfig file consistently. The
-`bootstrap-kind.sh [cluster]` and `bootstrap-eks.sh CONTEXT` wrappers remain
-available. Root sync confirms registration, not app, migration or endpoint health.
+`--kubeconfig /absolute/file` selects one kubeconfig file consistently.
+Root sync confirms registration, not app, migration or endpoint health.
 
 ## Change and promote an app
 
@@ -85,10 +82,7 @@ access, but no running cluster or AWS credentials. Use `--environment local` or
 
 Local PostgreSQL is provisioned separately by `infra-local`, outside kind,
 just as RDS is provisioned outside EKS. App sync runs migrations and rolls out the
-API against an existing database in both environments. Existing local databases
-need the [verified cutover](docs/local/database-migration.md) before publishing the
-overlay change; legacy manifests/tools remain for recovery and are not included
-in the active overlay.
+API against an existing database in both environments.
 
 Filled Secret files remain ignored and outside Kustomize. Keep database files,
 backups, credentials, Terraform state and saved plans outside version control.

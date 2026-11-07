@@ -4,7 +4,6 @@ The live request path is CloudFront HTTPS → private VPC origin → internal AL
 FastAPI → RDS. The default `*.cloudfront.net` hostname supplies the public
 certificate. Keep the ALB internal; private origin HTTP is unchanged.
 These instructions describe desired configuration and checks, not current health.
-Historical deployment IDs/results are in [deployment history](deployment-progress.md).
 
 ## 1. Prepare restricted ALB access
 
@@ -56,7 +55,7 @@ The viewer-request function permits only exact IPv4 `/32` addresses supplied by
 `../infra-aws/config/operator.tfvars`, shared with foundation's API allowlist.
 It uses connection-derived viewer IP and rejects other addresses before origin
 access. IPv6 remains disabled. A shared public IP permits all devices using that
-IP; app authentication is still required. No policy upgrade is part of this refactor.
+IP; app authentication is still required.
 
 ## Verify HTTPS, authentication, restrictions and logging
 
@@ -82,4 +81,4 @@ Finish with full stage plans and record live results without credentials.
 If the ISP/VPN changes the outbound IPv4, update the single ignored allowlist,
 review and apply fresh **foundation and edge** plans. Applying one stage alone
 does not update both restrictions. Keep AWS CLI access for recovery. Do not
-reuse consumed old plans or treat historical deployment URLs as current evidence.
+reuse consumed plans. Check the deployed outputs and endpoints directly.

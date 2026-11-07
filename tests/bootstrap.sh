@@ -4,7 +4,7 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/repo/scripts"
-cp "$root/scripts/bootstrap"*.sh "$tmp/repo/scripts/"
+cp "$root/scripts/bootstrap.sh" "$tmp/repo/scripts/"
 cat > "$tmp/repo/scripts/validate.sh" <<'FAKE'
 #!/usr/bin/env bash
 printf 'validate %s\n' "$*" >> "$LOG"
@@ -18,11 +18,6 @@ printf '\n' >> "$LOG"
 if [[ "$*" == *'rollout status'* && "$CASE" == controller ]]; then exit 42; fi
 if [[ "$*" == *'get ingressclass traefik'* && "$CASE" != class ]]; then echo traefik.io/ingress-controller; fi
 if [[ "$*" == *'get ingressclass alb'* && "$CASE" != class ]]; then echo ingress.k8s.aws/alb; fi
-if [[ "$CASE" == legacy && "$*" == *'get pvc '* ]]; then echo pvc/old; fi
-if [[ "$*" == *'get application staging-root aws-root '* ]]; then
-  if [[ "$CASE" == old-local-root ]]; then echo application.argoproj.io/staging-root; fi
-  if [[ "$CASE" == old-aws-root ]]; then echo application.argoproj.io/aws-root; fi
-fi
 if [[ "$*" == *'get application root '* ]]; then
   if [[ "$CASE" == wrong-root ]]; then echo root:argocd/other; fi
   if [[ "$CASE" == root-without-path ]]; then echo root:; fi
@@ -42,7 +37,7 @@ run() {
 for env in local aws; do
   context=selected; root_file=aws.yaml; platform=aws-load-balancer-controller
   if [[ "$env" == local ]]; then context=kind-selected; root_file=staging.yaml; platform=traefik; fi
-  for scenario in success existing-root validation controller class old-local-root old-aws-root wrong-root root-without-path; do
+  for scenario in success existing-root validation controller class wrong-root root-without-path; do
     run "$scenario" --environment "$env" --context "$context" --kubeconfig '/tmp/selected config'
     if [[ "$scenario" == success || "$scenario" == existing-root ]]; then
       [[ "$result" == 0 ]] || fail "$env success"
@@ -68,18 +63,5 @@ for arguments in '' '--context selected' '--environment local' '--environment lo
   # Intentional word splitting: each test case above is a fixed option sequence.
   run missing $arguments
   [[ "$result" != 0 && ! -s "$tmp/log" ]] || fail "reject before validation: $arguments"
-done
-run legacy --environment local --context kind-selected
-[[ "$result" != 0 ]] || fail 'legacy PVC must prevent registration'
-if grep -q '<apply>' "$tmp/log"; then fail 'legacy storage must stop registration'; fi
-for wrapper in kind eks; do
-  : > "$tmp/log"
-  CASE=success PATH="$tmp/bin:$PATH" LOG="$tmp/log" INFRA_LOCAL_KUBECONFIG='/tmp/wrapper config' KUBECONFIG='/tmp/wrapper config' \
-    bash "$tmp/repo/scripts/bootstrap-$wrapper.sh" selected > "$tmp/out" 2>&1 || fail wrapper
-  expected=selected; env=aws
-  if [[ "$wrapper" == kind ]]; then expected=kind-selected; env=local; fi
-  grep -q "<--context=$expected>" "$tmp/log" || fail 'wrapper context'
-  grep -q '<--kubeconfig=/tmp/wrapper config>' "$tmp/log" || fail 'wrapper kubeconfig'
-  grep -q "validate --environment $env" "$tmp/log" || fail 'wrapper environment'
 done
 printf 'GitOps environment selection, bootstrap safety and forwarding tests passed.\n'

@@ -160,9 +160,7 @@ curl -fsS "$APP_URL/ready"
 ```
 
 Open `$APP_URL/api/v1/docs/` in a browser, register a test account and log in.
-Earlier distribution hostnames are retained only in
-[deployment history](../../../../docs/aws/deployment-progress.md); a rebuild may
-assign a different address. Confirm authorization, logout, generated links and
+A rebuild may assign a different address. Confirm authorization, logout, generated links and
 canonical/slash redirects remain correct over HTTPS. Verify the distribution's HTTPS-only viewer
 policy rejects public HTTP. The origin ALB sees HTTP; proxy-scheme handling must
 be checked before making the public endpoint available to others.

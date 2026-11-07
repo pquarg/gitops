@@ -1,9 +1,8 @@
 # Deploy from start to finish
 
 Run app commands from `gitops`, alongside the actual `../infra-aws` checkout.
-This runbook provisions a fresh environment/database; an existing environment
-must complete [state migration](../../../infra-aws/docs/state-migration.md) first.
-No migration, apply or destructive rebuild is implied by editing configuration.
+This runbook provisions a fresh environment/database.
+Editing configuration does not apply changes or rebuild infrastructure.
 Use explicit Kubernetes contexts and review every saved Terraform plan.
 
 ## 1. Check tools, credentials and backend
@@ -27,7 +26,7 @@ assuming a fresh RDS database will restore it.
 
 Prepare `../infra-aws/config/operator.tfvars` from its checked-in example. Enter
 the approved operator IPv4 `/32` allowlist; foundation and edge use that one file.
-Keep old restrictions unchanged during an ownership migration. Then:
+Then:
 
 ```sh
 ../infra-aws/scripts/plan.sh foundation
@@ -95,9 +94,7 @@ git diff --check
 ```
 
 The bootstrap validates first, verifies CRDs/controllers/IngressClass and applies
-only the `root` registration. Existing `aws-root` installations first need the
-[root handover](../root-application-migration.md). `bootstrap-eks.sh CONTEXT` remains a
-compatibility wrapper. Root Synced confirms registration, not app health or
+only the `root` registration. Root Synced confirms registration, not app health or
 migration success. App `aws-myfastapiapp` remains **manually synced**. Perform a
 full sync with Force/Replace off so its migration hook runs; verify logs, Alembic
 revision, app readiness and database access using the app runbook.

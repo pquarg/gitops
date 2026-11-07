@@ -10,8 +10,7 @@ is selected. Use the manual sequence here to retain recovery copies or logs.
 
 Freeze applies/state writes, finish app syncs/migrations and stop external writers.
 Confirm account `245361883993`, profile `aws-project`, Region `eu-north-1`, explicit
-EKS context and all three current state keys. Complete any
-[state migration](../../../infra-aws/docs/state-migration.md) first. Record Git
+EKS context and all three current state keys. Record Git
 revisions, Helm status, Applications/finalizers/sync policies, EKS/RDS/ALB/origin/
 distribution IDs, SG rules, log bucket and state VersionIds in a private ledger.
 Take mode-600 state/Secret/configuration backups outside Git. Verify actual DB
@@ -140,6 +139,4 @@ using fresh full stage plans in foundation → platform → app/healthy ALB → 
 order. Re-import retained log bindings before normal edge applies, after validating
 provider IDs. A DB restore and its original app credentials require a deliberate
 recovery procedure; a Git revert or blank new instance cannot restore data.
-See [deploy from scratch](deploy-from-scratch.md) and the app runbook. Legacy
-one-state teardown resume records require their matching old implementation,
-never the staged command.
+See [deploy from scratch](deploy-from-scratch.md) and the app runbook.

@@ -58,11 +58,4 @@ for env, prefix in [('local', 'staging'), ('aws', 'aws')]:
     assert root['spec']['source']['repoURL'] == generator['repoURL']
     assert appset['spec']['template']['metadata']['name'] == prefix + '-{{index .path.segments 1}}'
     assert bool(template['syncPolicy'].get('automated')) == (env == 'local')
-# Legacy storage remains available for migration/recovery, outside app discovery.
-legacy = render('apps/myfastapiapp/overlays/local/postgres')
-pv = legacy['PersistentVolume', 'myfastapiapp-postgres-pv']
-assert pv['spec']['local']['path'] == '/mnt/myfastapiapp-postgres'
-assert pv['spec']['claimRef']['namespace'] == 'myfastapiapp'
-assert pv['spec']['persistentVolumeReclaimPolicy'] == 'Retain'
-assert pv['metadata']['annotations']['argocd.argoproj.io/sync-options'] == 'Prune=false,Delete=false'
 print('Rendered environment isolation, external database and image consistency checks passed.')

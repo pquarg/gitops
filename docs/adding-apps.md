@@ -36,8 +36,7 @@ Provision local deployment databases separately through `infra-local`, outside
 kind. Keep connection Secrets and schema migration Jobs in GitOps. Each app must
 have its own database, restricted login and independent backup/recovery plan.
 Use [myfastapiapp's database setup](../../infra-local/docs/database.md) as the current
-example. Legacy PV/PVC manifests and laptop paths under `/mnt/<app>-postgres`
-remain only for unmigrated installations and recovery.
+example.
 
 AWS databases and other cloud resources belong in `infra-aws`. The AWS overlay
 contains connection configuration, verified database TLS and an ALB Ingress.

@@ -32,7 +32,7 @@ See the [infrastructure contract](infrastructure.md) for the full handoff.
 
 ```mermaid
 flowchart TD
-    Operator[Operator runs bootstrap-eks.sh] --> Root[root Application]
+    Operator[Operator runs bootstrap.sh with AWS environment and context] --> Root[root Application]
     Git[gitops on GitHub: main] --> Root
     Root --> Registrations[argocd/aws Kustomization]
     Registrations --> AppSet[aws-apps ApplicationSet]
@@ -62,7 +62,8 @@ combines `../../base` with AWS configuration and supplies the release image tag.
 the checked-in template. Publishing a commit makes it available to Argo CD;
 an operator reviews the diff and starts the app sync.
 
-[scripts/bootstrap-eks.sh](../../scripts/bootstrap-eks.sh) validates the manifests,
+[scripts/bootstrap.sh](../../scripts/bootstrap.sh), using
+`--environment aws --context CONTEXT`, validates the manifests,
 checks the existing platform components and registers `root`. It requires an
 explicit Kubernetes context. It does not provision the platform or start the
 app's manual sync. Argo CD reads the published `main` branch, so local edits must
@@ -136,7 +137,6 @@ access-log delivery managed through `infra-aws/terraform/edge`. The same ignored
 operator allowlist supplies foundation's API restrictions and edge's viewer
 function. Configuration does not prove the live restriction is active; verify
 both allowed and denied networks after reviewing/applying both owning stages.
-Earlier deployment evidence remains in [history](deployment-progress.md).
 
 `/health` is the API liveness check. `/ready` checks database connectivity and
 is used by Kubernetes readiness and ALB target health checks. These checks serve
@@ -196,5 +196,4 @@ balancers are removed. Follow [teardown](teardown.md) for dependency order and
 backup/log retention choices.
 
 For day-to-day navigation, use [setup](setup.md), [credentials](credentials.md)
-and [validation](validation.md). For dated deployment checkpoints and unfinished
-operational work, use [deployment progress](deployment-progress.md).
+and [validation](validation.md).

@@ -109,5 +109,4 @@ terraform -chdir=../infra-aws/terraform/edge output myfastapiapp_https
 ```
 
 Discovery uses AWS metadata, not another root's sensitive remote state. Read
-[state migration](../../../infra-aws/docs/state-migration.md) for existing bindings
-and [teardown](teardown.md) for the reverse dependency order.
+[teardown](teardown.md) for the reverse dependency order.
