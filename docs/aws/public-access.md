@@ -8,11 +8,11 @@ These instructions describe desired configuration and checks, not current health
 ## 1. Prepare restricted ALB access
 
 Foundation owns the frontend SG and rules in
-`../infra-aws/terraform/foundation/app-ingress.tf`: HTTP from the CloudFront
+`../infra/environments/aws/dev/foundation/app-ingress.tf`: HTTP from the CloudFront
 origin-facing prefix list, app/check traffic to worker port 8000. Read:
 
 ```sh
-terraform -chdir=../infra-aws/terraform/foundation output myfastapiapp_alb_security_group
+terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group
 ```
 
 Keep that identity in the app Ingress. The controller owns its backend group,
@@ -29,7 +29,7 @@ sync the full app including its migration hook.
 ## 3. Verify the origin
 
 ```sh
-../infra-aws/scripts/check-stage.sh edge --context aws-deployment-project
+../infra/environments/aws/dev/scripts/check-stage.sh edge --context aws-deployment-project
 ```
 
 Supply `--kubeconfig /absolute/file` when needed. This verifies the selected EKS
@@ -40,9 +40,9 @@ if target health fails. Private ALB DNS is not a public app URL.
 ## 4. Provision CloudFront through Terraform
 
 ```sh
-../infra-aws/scripts/plan.sh edge --context aws-deployment-project
-terraform -chdir=../infra-aws/terraform/edge apply stage.tfplan
-terraform -chdir=../infra-aws/terraform/edge output myfastapiapp_https
+../infra/scripts/plan.sh --environment aws/dev --stage edge --context aws-deployment-project
+terraform -chdir=../infra/environments/aws/dev/edge apply stage.tfplan
+terraform -chdir=../infra/environments/aws/dev/edge output myfastapiapp_https
 ```
 
 Review the full saved edge plan first. It owns the VPC origin, distribution,
@@ -52,7 +52,7 @@ plan is required. The bucket is private, encrypted and expires access logs after
 viewer IPs. Log delivery stays `us-east-1`, bucket/VPC resources `eu-north-1`.
 
 The viewer-request function permits only exact IPv4 `/32` addresses supplied by
-`../infra-aws/config/operator.tfvars`, shared with foundation's API allowlist.
+`../infra/environments/aws/dev/config/operator.tfvars`, shared with foundation's API allowlist.
 It uses connection-derived viewer IP and rejects other addresses before origin
 access. IPv6 remains disabled. A shared public IP permits all devices using that
 IP; app authentication is still required.
@@ -63,7 +63,7 @@ Read the URL from the current edge output after the distribution reaches
 Deployed. Run from `gitops`:
 
 ```sh
-APP_URL="$(terraform -chdir=../infra-aws/terraform/edge output -json myfastapiapp_https |
+APP_URL="$(terraform -chdir=../infra/environments/aws/dev/edge output -json myfastapiapp_https |
   python3 -c 'import json, sys; print(json.load(sys.stdin)["url"])')"
 python3 scripts/check-public-endpoint.py "$APP_URL"
 # Separately authorized test-user creation/login/logout check:

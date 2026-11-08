@@ -6,7 +6,9 @@ cluster/application setup reference. For removal, use [teardown](teardown.md).
 
 Run commands from this repository root. Install AWS CLI v2, kubectl, Python 3,
 and the [validation tools](validation.md). Complete the
-[infrastructure contract](infrastructure.md) in `infra-aws` first.
+[infrastructure contract](infrastructure.md) in `infra/environments/aws/dev` first.
+
+GitOps `--environment aws` currently maps to infrastructure `--environment aws/dev`.
 
 ## 1. Select the project and cluster
 
@@ -24,14 +26,14 @@ aws eks update-kubeconfig --name deployment-project-dev --region eu-north-1 \
 kubectl --context "$EKS_CONTEXT" get nodes
 ```
 
-The cluster name must come from `infra-aws`; `EKS_CONTEXT` is a local alias. Use the
+The cluster name must come from `infra/environments/aws/dev`; `EKS_CONTEXT` is a local alias. Use the
 same alias in every later command. If AWS credentials have expired, authenticate
 the configured profile before continuing. Check service availability for the
 project's plan before provisioning.
 
 ## 2. Verify platform components and Git access
 
-`infra-aws` must already have installed Argo CD, its ApplicationSet controller, and
+`infra/environments/aws/dev` must already have installed Argo CD, its ApplicationSet controller, and
 the AWS Load Balancer Controller. This repository does not install those again.
 The bootstrap script validates before registration and checks their rollouts and the `alb` IngressClass.
 
@@ -51,7 +53,7 @@ enabled and provision the private key outside Git. See
 ## 3. Configure the app
 
 Check the frontend security-group ID in `apps/myfastapiapp/overlays/aws/ingress.yaml` against
-`terraform -chdir=../infra-aws/terraform/foundation output myfastapiapp_alb_security_group`. Its scheme must
+`terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group`. Its scheme must
 remain `internal`, with the HTTP port 80 listener and controller-managed backend
 rules. No custom hostname or ACM certificate is needed for this origin.
 Provision its namespace, database connection and
@@ -93,7 +95,7 @@ internet and is not the final app URL.
 
 Kubernetes changes that create an ALB incur AWS charges. Stopping a local terminal
 or port forward does not remove EKS, RDS, load balancers or networking resources.
-For a disposable environment, plan cleanup in `infra-aws` and confirm what data must
+For a disposable environment, plan cleanup in `infra/environments/aws/dev` and confirm what data must
 be retained before destroying resources.
 
 The common entry point accepts `--kubeconfig /absolute/file` and requires an

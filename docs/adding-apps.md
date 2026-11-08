@@ -32,13 +32,13 @@ container ports, probes, Service, migration command and compatible security/reso
 settings. Keep environment differences in overlays; see myfastapiapp for an example
 that preserves its existing AWS security settings in an AWS patch.
 
-Provision local deployment databases separately through `infra-local`, outside
+Provision local deployment databases separately through `infra/environments/local`, outside
 kind. Keep connection Secrets and schema migration Jobs in GitOps. Each app must
 have its own database, restricted login and independent backup/recovery plan.
-Use [myfastapiapp's database setup](../../infra-local/docs/database.md) as the current
+Use [myfastapiapp's database setup](../../infra/environments/local/docs/database.md) as the current
 example.
 
-AWS databases and other cloud resources belong in `infra-aws`. The AWS overlay
+AWS databases and other cloud resources belong in `infra/environments/aws/dev`. The AWS overlay
 contains connection configuration, verified database TLS and an ALB Ingress.
 Use each app's own frontend security group and ALB name. Provision CloudFront after
 the controller creates a healthy ALB. Follow the [AWS infrastructure contract](aws/infrastructure.md).

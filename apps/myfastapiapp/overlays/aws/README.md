@@ -9,8 +9,8 @@ Application code, Dockerfile and Alembic revisions live in the separate
 | Namespace | `myfastapiapp` |
 | Argo CD Application | `aws-myfastapiapp` |
 | Initial image | `ghcr.io/pquarg/myfastapiapp:0.1.12` |
-| Database | Private RDS PostgreSQL, provisioned through `infra-aws` |
-| Public URL | Read `myfastapiapp_https` from `infra-aws/terraform/edge` after edge provisioning |
+| Database | Private RDS PostgreSQL, provisioned through `infra/environments/aws/dev` |
+| Public URL | Read `myfastapiapp_https` from `infra/environments/aws/dev/edge` after edge provisioning |
 | Origin | Internal ALB `deployment-project-dev-app`, HTTP port 80 |
 
 The app has one replica initially. This is a starting deployment, not a configured
@@ -94,7 +94,7 @@ role already exist. This learning deployment starts with a fresh database;
 these manifests do not copy local data.
 
 Verify the frontend group configured in `ingress.yaml` matches
-`terraform -chdir=../infra-aws/terraform/foundation output myfastapiapp_alb_security_group`. The manifest
+`terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group`. The manifest
 uses internal ALB `deployment-project-dev-app`, HTTP port 80, IP targets and
 controller-managed backend rules. The host-independent rule accepts the eventual
 CloudFront viewer hostname. HTTPS will terminate at CloudFront; there is no
@@ -135,7 +135,7 @@ kubectl --context "$EKS_CONTEXT" -n myfastapiapp get ingress myfastapiapp-ingres
 ```
 
 The returned hostname is private. Use it and the deterministic ALB name for the
-later CloudFront VPC-origin lookup through `infra-aws`; do not use it as a public
+later CloudFront VPC-origin lookup through `infra/environments/aws/dev`; do not use it as a public
 app URL. First verify the migration succeeded and the ALB targets are healthy.
 
 For a local check before CloudFront is provisioned, run this in another terminal:
@@ -153,7 +153,7 @@ CloudFront after the internal ALB is Active with healthy targets. Then set the
 assigned CloudFront hostname and test:
 
 ```sh
-APP_URL="$(terraform -chdir=../infra-aws/terraform/edge output -json myfastapiapp_https |
+APP_URL="$(terraform -chdir=../infra/environments/aws/dev/edge output -json myfastapiapp_https |
   python3 -c 'import json, sys; print(json.load(sys.stdin)["url"])')"
 curl -fsS "$APP_URL/health"
 curl -fsS "$APP_URL/ready"
@@ -216,7 +216,7 @@ causes the Deployment to roll out on the next full sync.
 ## Recovery
 
 Keep app auto-sync paused during recovery if it was enabled. Restore an RDS
-snapshot to a separate instance through `infra-aws`/the chosen recovery process,
+snapshot to a separate instance through `infra/environments/aws/dev`/the chosen recovery process,
 verify recovered data and schema compatibility, then update the app's Secret to
 the restored private endpoint. Restart or sync the app deliberately and verify it
 before retiring the previous database. Restores and local-to-AWS data transfers

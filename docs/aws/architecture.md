@@ -11,14 +11,15 @@ in the runbooks; it is not a live AWS inventory.
 
 ## The repositories and their responsibilities
 
-The project separates application development, infrastructure and deployment:
+The project separates application development, infrastructure and deployment.
+Both infrastructure targets below belong to the same `infra` repository:
 
-| Repository | Responsibility | Produces or manages |
+| Repository or target directory | Responsibility | Produces or manages |
 | --- | --- | --- |
 | `myfastapiapp` | Application development | API code, Dockerfile, Alembic database migrations and release images published to GitHub Container Registry (GHCR) |
-| `infra-aws` | AWS platform provisioning through Terraform | Network, EKS cluster and managed EC2 workers, private RDS PostgreSQL, security groups, Argo CD/controller installations, CloudFront and access-log storage |
+| `infra/environments/aws/dev` | AWS platform provisioning through Terraform | Network, EKS cluster and managed EC2 workers, private RDS PostgreSQL, security groups, Argo CD/controller installations, CloudFront and access-log storage |
 | **`gitops`** | Application deployment on that platform | Kubernetes manifests, Argo CD registrations, release image selection, credential helpers and operational guides |
-| `infra-local` | Local platform provisioning | kind, shared Traefik, Argo CD and separate Compose PostgreSQL; local app manifests use this GitOps repository’s local overlay |
+| `infra/environments/local` | Local platform provisioning | kind, shared Traefik, Argo CD and separate Compose PostgreSQL; local app manifests use this GitOps repository’s local overlay |
 
 There are two ownership boundaries within AWS as well. Argo CD manages the
 application's Kubernetes resources. The **AWS Load Balancer Controller** watches
@@ -133,7 +134,7 @@ the mounted CA bundle.
 
 The [public-access runbook](public-access.md) records disabled API caching,
 security/no-store response headers, HTTPS redirect handling and private S3
-access-log delivery managed through `infra-aws/terraform/edge`. The same ignored
+access-log delivery managed through `infra/environments/aws/dev/edge`. The same ignored
 operator allowlist supplies foundation's API restrictions and edge's viewer
 function. Configuration does not prove the live restriction is active; verify
 both allowed and denied networks after reviewing/applying both owning stages.
@@ -146,14 +147,14 @@ different purposes from Argo CD's configuration sync status.
 
 The first deployment has a dependency order:
 
-1. Apply `infra-aws/terraform/foundation` for network/EKS/RDS/controller IAM and
+1. Apply `infra/environments/aws/dev/foundation` for network/EKS/RDS/controller IAM and
    frontend SG/rules, then `terraform/platform` for the two Helm releases.
 2. Provision Git access, the app database login/connection Secret and the GHCR
    pull Secret. Set the Ingress security-group ID from the infrastructure output.
 3. Validate and publish the manifests, bootstrap the root registration, then
    review and manually sync the entire app.
 4. Wait for the internal ALB and healthy targets, then provision its CloudFront
-   VPC origin and distribution through `infra-aws`.
+   VPC origin and distribution through `infra/environments/aws/dev`.
 5. Verify the public endpoint, authentication and access-log delivery.
 
 CloudFront comes after the app sync because its VPC origin references the ALB

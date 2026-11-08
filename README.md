@@ -4,7 +4,7 @@ One repository deploys the same applications to local kind and AWS EKS.
 Kustomize combines a shared app base with an environment overlay. Each cluster's
 Argo CD reads only its own registrations and overlays from this Git repository.
 Application source and image builds remain in `../apps/`; platform provisioning
-remains in `../infra-local` and `../infra-aws`.
+remains in the independent `../infra` repository.
 
 ```text
 apps/myfastapiapp/
@@ -77,10 +77,10 @@ access, but no running cluster or AWS credentials. Use `--environment local` or
 - [Add an app](docs/adding-apps.md)
 - [Local app releases, database backups and recovery](apps/myfastapiapp/overlays/local/README.md)
 - [AWS app releases, RDS and recovery](apps/myfastapiapp/overlays/aws/README.md)
-- [Local platform](../infra-local/README.md)
-- [AWS platform](../infra-aws/README.md)
+- [Local platform](../infra/environments/local/README.md)
+- [AWS platform](../infra/environments/aws/dev/README.md)
 
-Local PostgreSQL is provisioned separately by `infra-local`, outside kind,
+Local PostgreSQL is provisioned separately by `infra/environments/local`, outside kind,
 just as RDS is provisioned outside EKS. App sync runs migrations and rolls out the
 API against an existing database in both environments.
 

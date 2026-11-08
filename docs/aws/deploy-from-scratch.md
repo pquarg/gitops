@@ -1,6 +1,6 @@
 # Deploy from start to finish
 
-Run app commands from `gitops`, alongside the actual `../infra-aws` checkout.
+Run app commands from `gitops`, alongside the actual `../infra/environments/aws/dev` checkout.
 This runbook provisions a fresh environment/database.
 Editing configuration does not apply changes or rebuild infrastructure.
 Use explicit Kubernetes contexts and review every saved Terraform plan.
@@ -16,7 +16,7 @@ aws sts get-caller-identity --profile aws-project --region eu-north-1
 ```
 
 The existing S3 backend and bootstrap key remain unchanged. If absent, follow
-[backend creation](../../../infra-aws/docs/teardown.md#rebuild-after-deleting-the-backend).
+[backend creation](../../../infra/environments/aws/dev/docs/teardown.md#rebuild-after-deleting-the-backend).
 Never create fresh local state over an existing remote installation. Inspect
 which stages/resources exist before proceeding. Keep state/Secret backups outside
 Git. For existing data, follow the app's backup/recovery procedure rather than
@@ -24,16 +24,16 @@ assuming a fresh RDS database will restore it.
 
 ## 2. Apply foundation
 
-Prepare `../infra-aws/config/operator.tfvars` from its checked-in example. Enter
+Prepare `../infra/environments/aws/dev/config/operator.tfvars` from its checked-in example. Enter
 the approved operator IPv4 `/32` allowlist; foundation and edge use that one file.
 Then:
 
 ```sh
-../infra-aws/scripts/plan.sh foundation
-terraform -chdir=../infra-aws/terraform/foundation apply stage.tfplan
-terraform -chdir=../infra-aws/terraform/foundation output eks_cluster_name
-terraform -chdir=../infra-aws/terraform/foundation output database
-terraform -chdir=../infra-aws/terraform/foundation output myfastapiapp_alb_security_group
+../infra/scripts/plan.sh --environment aws/dev --stage foundation
+terraform -chdir=../infra/environments/aws/dev/foundation apply stage.tfplan
+terraform -chdir=../infra/environments/aws/dev/foundation output eks_cluster_name
+terraform -chdir=../infra/environments/aws/dev/foundation output database
+terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group
 ```
 
 This full root owns VPC/EKS/RDS and controller IAM/Pod Identity/frontend SG/rules.
@@ -49,8 +49,8 @@ Select one kubeconfig/context consistently:
 EKS_CONTEXT=aws-deployment-project
 aws eks update-kubeconfig --name deployment-project-dev --profile aws-project \
   --region eu-north-1 --alias "$EKS_CONTEXT"
-../infra-aws/scripts/plan.sh platform --context "$EKS_CONTEXT"
-terraform -chdir=../infra-aws/terraform/platform apply stage.tfplan
+../infra/scripts/plan.sh --environment aws/dev --stage platform --context "$EKS_CONTEXT"
+terraform -chdir=../infra/environments/aws/dev/platform apply stage.tfplan
 ```
 
 Add `--kubeconfig /absolute/file` to the AWS update-kubeconfig and stage command
@@ -59,8 +59,8 @@ The database and registry Python helpers accept a context but no `--kubeconfig`
 option; select the same single file through `KUBECONFIG=/absolute/file` when
 invoking those helpers. The checker verifies the endpoint matches EKS and Pod Identity prerequisites are
 available. Platform installs pinned Argo CD and load balancer controller releases.
-Their pins/values live in `../infra-aws/argocd/` and
-`../infra-aws/load-balancer-controller/`. Platform uses AWS token-based Helm auth;
+Their pins/values live in `../infra/environments/aws/dev/argocd/` and
+`../infra/environments/aws/dev/load-balancer-controller/`. Platform uses AWS token-based Helm auth;
 it reads EKS metadata without another root's sensitive state.
 
 ## 4. Prepare credentials, images and Git
@@ -102,11 +102,11 @@ revision, app readiness and database access using the app runbook.
 ## 6. Wait for the app ALB and apply edge
 
 ```sh
-../infra-aws/scripts/check-stage.sh edge --context "$EKS_CONTEXT"
-../infra-aws/scripts/plan.sh edge --context "$EKS_CONTEXT"
-terraform -chdir=../infra-aws/terraform/edge apply stage.tfplan
-terraform -chdir=../infra-aws/terraform/edge output myfastapiapp_vpc_origin
-terraform -chdir=../infra-aws/terraform/edge output myfastapiapp_https
+../infra/environments/aws/dev/scripts/check-stage.sh edge --context "$EKS_CONTEXT"
+../infra/scripts/plan.sh --environment aws/dev --stage edge --context "$EKS_CONTEXT"
+terraform -chdir=../infra/environments/aws/dev/edge apply stage.tfplan
+terraform -chdir=../infra/environments/aws/dev/edge output myfastapiapp_vpc_origin
+terraform -chdir=../infra/environments/aws/dev/edge output myfastapiapp_https
 ```
 
 The checks require an Active controller-created ALB with healthy targets. Edge

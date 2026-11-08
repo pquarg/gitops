@@ -2,7 +2,7 @@
 
 Choose retention and destructive scope before running commands. This procedure
 is for reviewed operator work; it is not a validation test. The
-[automated command](../../../infra-aws/docs/teardown.md) deletes runtime, database
+[automated command](../../../infra/environments/aws/dev/docs/teardown.md) deletes runtime, database
 recovery data and access logs, retaining the backend unless `--delete-backend`
 is selected. Use the manual sequence here to retain recovery copies or logs.
 
@@ -30,8 +30,9 @@ charges. State contains secrets and does not replace database backups.
 ## 2. Prepare isolated stage configurations
 
 Work in a private copy of the infrastructure directory layout, preserving
-`terraform/foundation`, `terraform/platform`, `terraform/edge`, root controller
-values/pins, functions, policies, locks and ignored `config/operator.tfvars`.
+`environments/aws/dev/{foundation,platform,edge}`, environment controller
+values/pins, functions, policies, locks, `shared/argocd/values.yaml` and ignored
+`environments/aws/dev/config/operator.tfvars`.
 Copy only required configuration, not cached `.terraform`, binary plans or old
 state. Set `TEARDOWN_COPY` to that absolute private root. Initialize each copy
 against its existing S3 key and save fresh `state pull` snapshots outside Git.
@@ -61,10 +62,10 @@ After choosing logs, review a full edge destroy plan while ALB/foundation/platfo
 still exist:
 
 ```sh
-terraform -chdir="$TEARDOWN_COPY/terraform/edge" plan -destroy \
-  -var-file=../../config/operator.tfvars -out=remove-edge.tfplan
-terraform -chdir="$TEARDOWN_COPY/terraform/edge" show remove-edge.tfplan
-terraform -chdir="$TEARDOWN_COPY/terraform/edge" apply remove-edge.tfplan
+terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/edge" plan -destroy \
+  -var-file=../config/operator.tfvars -out=remove-edge.tfplan
+terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/edge" show remove-edge.tfplan
+terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/edge" apply remove-edge.tfplan
 ```
 
 Require only intended edge deletions, no creates/replacements/updates and no
@@ -91,9 +92,9 @@ revoking arbitrary rules. Do not destroy platform while ALB cleanup is pending.
 After confirming there are no controller-owned load balancers/targets left:
 
 ```sh
-terraform -chdir="$TEARDOWN_COPY/terraform/platform" plan -destroy -out=remove-platform.tfplan
-terraform -chdir="$TEARDOWN_COPY/terraform/platform" show remove-platform.tfplan
-terraform -chdir="$TEARDOWN_COPY/terraform/platform" apply remove-platform.tfplan
+terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/platform" plan -destroy -out=remove-platform.tfplan
+terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/platform" show remove-platform.tfplan
+terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/platform" apply remove-platform.tfplan
 ```
 
 Only the two Helm releases should be deleted. The EKS API/workers and controller
@@ -115,10 +116,10 @@ changes before destroying. Reject other resource drift, creation or replacement.
 Then review the full foundation destroy:
 
 ```sh
-terraform -chdir="$TEARDOWN_COPY/terraform/foundation" plan -destroy \
-  -var-file=../../config/operator.tfvars -out=remove-foundation.tfplan
-terraform -chdir="$TEARDOWN_COPY/terraform/foundation" show remove-foundation.tfplan
-terraform -chdir="$TEARDOWN_COPY/terraform/foundation" apply remove-foundation.tfplan
+terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/foundation" plan -destroy \
+  -var-file=../config/operator.tfvars -out=remove-foundation.tfplan
+terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/foundation" show remove-foundation.tfplan
+terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/foundation" apply remove-foundation.tfplan
 ```
 
 Expect only foundation removals. It must not include CloudFront, Helm releases
@@ -131,7 +132,7 @@ detached and recorded. Do not claim removal merely because Terraform exited zero
 ## 7. Backend and recovery
 
 Retain bootstrap/state by default. Only a separately authorized backend retirement
-should delete its versions; use the [backend-last procedure](../../../infra-aws/docs/teardown.md).
+should delete its versions; use the [backend-last procedure](../../../infra/environments/aws/dev/docs/teardown.md).
 Never destroy the bucket while the Terraform executing deletion uses state in it.
 
 Private configs/ledger/states remain until recovery/removal is verified. Restore

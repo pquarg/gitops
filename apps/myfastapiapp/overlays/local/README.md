@@ -2,7 +2,7 @@
 
 Run commands from `gitops`. Source, image builds and Alembic revisions live in
 the separate `../apps/myfastapiapp` repository; the deployment database is
-provisioned by `infra-local`.
+provisioned by `infra/environments/local`.
 
 | Setting | Value |
 | --- | --- |
@@ -26,14 +26,14 @@ and the database password are separate credentials.
 
 ### 1. Start the deployment database
 
-First follow [database provisioning](../../../../../infra-local/docs/database.md#first-setup).
-From `infra-local`, `./scripts/local-database.sh status` must show a healthy
+First follow [database provisioning](../../../../../infra/environments/local/docs/database.md#first-setup).
+From `infra/environments/local`, `./scripts/local-database.sh status` must show a healthy
 PostgreSQL service. The app password is in `app-password` under the directory
-configured by `LOCAL_DB_SECRETS_DIR` in `infra-local/database/.env`; the suggested
+configured by `LOCAL_DB_SECRETS_DIR` in `infra/environments/local/database/.env`; the suggested
 directory is `$HOME/.local/share/infra-local/database-secrets`.
 Missing configuration/password files on a fresh setup mean database first
 setup is incomplete. For an existing database, preserve its credentials and
-follow the [database lifecycle guide](../../../../../infra-local/docs/database.md#lifecycle-and-credentials).
+follow the [database lifecycle guide](../../../../../infra/environments/local/docs/database.md#lifecycle-and-credentials).
 
 ### 2. Create the namespace and registry Secret
 
@@ -144,7 +144,7 @@ kubectl --context kind-deployment -n myfastapiapp rollout status deployment/myfa
 ```
 
 Changing a password file or Kubernetes Secret does not rotate an existing database
-role. Follow [database credential rotation](../../../../../infra-local/docs/database.md#lifecycle-and-credentials),
+role. Follow [database credential rotation](../../../../../infra/environments/local/docs/database.md#lifecycle-and-credentials),
 then run the connectivity probe and verify readiness/login.
 
 ## Make the app image available
@@ -173,7 +173,7 @@ kind load docker-image "$APP_IMAGE" --name deployment
 
 Use a new image tag for every code release. `IfNotPresent` can reuse a previously
 loaded image with the same tag. The app repository’s development Compose database
-and infra-local’s deployment database are independent; neither copies records automatically.
+and infra/environments/local’s deployment database are independent; neither copies records automatically.
 
 ## Verify the deployment
 
@@ -225,8 +225,8 @@ Events retain earlier errors; match them to the current Pod and its timestamp.
 | GHCR `401 Unauthorized`, `ImagePullBackOff` or `FailedToRetrieveImagePullSecret` | Check `registry-credentials` exists in `myfastapiapp`. Rerun the [registry helper](../../../../docs/local/credentials.md#registry-authentication) with a valid classic PAT with `read:packages` and package access. |
 | `CreateContainerConfigError` with `secret "myfastapiapp-secrets" not found` | Apply the filled connection Secret from [credential setup](#3-configure-the-database-connection-secret). |
 | `failed to resolve host 'myfastapiapp-postgres-service'` | The connection still uses the old in-cluster address. Update the ignored Secret file to `host.docker.internal:5433`, use the current Compose app password and apply it again. |
-| Connection refused or timed out | Check Docker Desktop, PostgreSQL health, the configured host port and the Pod-to-host route. See [database setup](../../../../../infra-local/docs/database.md#first-setup). |
-| Password authentication failed | Use the existing Compose app password for `myfastapiapp`. Replacing a password file does not rotate an initialized database; follow [credential rotation](../../../../../infra-local/docs/database.md#lifecycle-and-credentials). |
+| Connection refused or timed out | Check Docker Desktop, PostgreSQL health, the configured host port and the Pod-to-host route. See [database setup](../../../../../infra/environments/local/docs/database.md#first-setup). |
+| Password authentication failed | Use the existing Compose app password for `myfastapiapp`. Replacing a password file does not rotate an initialized database; follow [credential rotation](../../../../../infra/environments/local/docs/database.md#lifecycle-and-credentials). |
 | Database probe appears to hang after `job.batch/... created` | Inspect the Job status and logs below. The helper waits up to 120 seconds for success even if the Job has failed. |
 
 For a waiting database probe, copy its `local-db-check-...` name from the
@@ -266,7 +266,7 @@ ignored Secret needs no commit or push; manifest changes must be published.
 Use a new image tag for each code release. Manifest-only edits, such as resource
 settings, replicas, and Ingress rules, need only a deployment-repository commit.
 FastAPI keeps its app release version; PostgreSQL has its own image version in
-`infra-local/database/compose.yaml` in the sibling repository. PostgreSQL is
+`infra/environments/local/database/compose.yaml` in the sibling repository. PostgreSQL is
 provisioned separately; app sync does not upgrade or restart it.
 See [image publishing](#make-the-app-image-available)
 if a failed release skipped image publication.
@@ -275,8 +275,8 @@ if a failed release skipped image publication.
 
 1. Disable auto-sync on `staging-myfastapiapp` in Argo CD and wait for active
    syncs/migration Jobs to finish. The ApplicationSet preserves this live pause.
-2. Follow [backup and restore verification](../../../../../infra-local/docs/database.md#backup-and-restore).
-   Run the Compose backup helper from `infra-local`. Keep writers paused when
+2. Follow [backup and restore verification](../../../../../infra/environments/local/docs/database.md#backup-and-restore).
+   Run the Compose backup helper from `infra/environments/local`. Keep writers paused when
    the recovery point must preserve every write through the change.
 3. Validate and review before publishing:
 
@@ -299,17 +299,17 @@ if a failed release skipped image publication.
 If migrations succeed but the API fails, the schema has already changed. Review
 compatibility before reverting the app image; Git rollback does not undo migrations.
 For deliberate disposable-data resets, follow the
-[Compose reset procedure](../../../../../infra-local/docs/database.md#deliberately-reset-disposable-app-data).
+[Compose reset procedure](../../../../../infra/environments/local/docs/database.md#deliberately-reset-disposable-app-data).
 
 ## Recovery after a cluster rebuild
 
 The database continues running outside kind, with its Docker volume and roles
-unchanged. Follow [platform rebuild](../../../../../infra-local/docs/rebuild.md),
+unchanged. Follow [platform rebuild](../../../../../infra/environments/local/docs/rebuild.md),
 recreate the app namespace, app connection Secret, registry/Git credentials and
 selected image, then run the Pod connectivity probe before registration.
 No database directory or storage mount is required for this app on a fresh cluster.
 
 Database recovery is independent of cluster recreation. Follow
-[backup/restore](../../../../../infra-local/docs/database.md#backup-and-restore)
+[backup/restore](../../../../../infra/environments/local/docs/database.md#backup-and-restore)
 and verify actual app behaviour before traffic. Password files only initialize
 empty storage; keep the passwords matching the existing database roles.

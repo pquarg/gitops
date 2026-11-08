@@ -4,26 +4,26 @@ Run commands from `gitops` unless stated otherwise. The default cluster is
 `deployment`, context `kind-deployment`. App sync connects to a separately
 provisioned Compose database; it does not create PostgreSQL or mount storage.
 
-## 1. Prepare the platform with infra-local
+## 1. Prepare the platform with infra/environments/local
 
-Follow [infra-local's README](../../../infra-local/README.md) to provision separate
+Follow [infra/environments/local's README](../../../infra/environments/local/README.md) to provision separate
 Compose PostgreSQL, configure the kind localhost port mapping, create the cluster, install Argo CD
 and install shared Traefik through Terraform Helm. Complete its database first
 setup and create the ignored kind configuration before running its platform
 scripts. Skip cluster creation for an existing cluster. From `gitops`, switch
-to `infra-local` for these commands, then return:
+to `infra/environments/local` for these commands, then return:
 
 ```sh
-cd ../infra-local
+cd ../infra/environments/local
 ./scripts/local-database.sh up
 ./scripts/local-database.sh status
 ./scripts/create-cluster.sh
 ./scripts/bootstrap-kind.sh
-cd ../gitops
+cd ../../../gitops
 ```
 
 Expect PostgreSQL to be healthy before continuing. If `database/.env` or its
-password files are missing, follow [database first setup](../../../infra-local/docs/database.md#first-setup).
+password files are missing, follow [database first setup](../../../infra/environments/local/docs/database.md#first-setup).
 Installing Argo CD does not create those files or start PostgreSQL.
 
 The platform must provide:
@@ -38,7 +38,7 @@ The cluster needs no app database mount or storage node label.
 
 ## 2. Connect the deployment Git repository
 
-Open the Argo CD UI following [infra-local's sign-in instructions](../../../infra-local/README.md#2-install-argo-cd-and-shared-ingress).
+Open the Argo CD UI following [infra/environments/local's sign-in instructions](../../../infra/environments/local/README.md#2-install-argo-cd-and-shared-ingress).
 Under **Settings → Repositories**, connect
 `git@github.com:pquarg/gitops.git` with a read-only Git credential usable
 by the `default` project. Argo CD must show the repository connection as
@@ -46,7 +46,7 @@ successful before registration. If using another remote, update every
 `repoURL` in `root/staging.yaml` and `argocd/local/apps.yaml` to match it.
 
 This credential reads deployment manifests. App registry credentials are
-separate and belong in each app's namespace. No credential for an `infra-local`
+separate and belong in each app's namespace. No credential for an `infra/environments/local`
 Git remote is required: its platform configuration is applied from disk.
 
 ## 3. Prepare the apps
@@ -103,7 +103,7 @@ The script validates first, checks the Argo CD controllers and shared ingress, t
 It discovers every `apps/*/overlays/local` entry point and creates an independent Application,
 including `staging-myfastapiapp` in namespace `myfastapiapp`. Each app runs
 migrations against the existing database and rolls out the API. Traefik
-is managed separately by `infra-local`.
+is managed separately by `infra/environments/local`.
 
 Root **Synced** means registration was applied; wait for the app's own
 **Synced / Healthy** status before testing. Follow its
@@ -114,8 +114,8 @@ app Service. Docker Desktop and the cluster must remain running.
 ## Recovery
 
 The current Compose database survives kind replacement independently. Follow
-[platform rebuild](../../../infra-local/docs/rebuild.md#rebuild-with-the-external-compose-database)
-and [database backup/restore](../../../infra-local/docs/database.md#backup-and-restore).
+[platform rebuild](../../../infra/environments/local/docs/rebuild.md#rebuild-with-the-external-compose-database)
+and [database backup/restore](../../../infra/environments/local/docs/database.md#backup-and-restore).
 Recreate Kubernetes Secrets/images and verify Pod connectivity before registration;
 verify existing records and login afterward.
 

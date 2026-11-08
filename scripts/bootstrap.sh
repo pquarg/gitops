@@ -67,7 +67,9 @@ else
   expected_controller=ingress.k8s.aws/alb
 fi
 if [[ "$controller" != "$expected_controller" ]]; then
-  printf 'Error: provision the expected %s ingress controller through infra-%s first.\n' "$environment" "$environment" >&2
+  infrastructure_target=local
+  if [[ "$environment" == aws ]]; then infrastructure_target=aws/dev; fi
+  printf 'Error: provision the expected %s ingress controller through infra/environments/%s first.\n' "$environment" "$infrastructure_target" >&2
   exit 1
 fi
 printf 'Registering %s applications from gitops/main\n' "$environment"

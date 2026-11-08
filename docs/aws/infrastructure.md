@@ -1,20 +1,20 @@
 # Infrastructure contract
 
-`infra-aws` creates AWS infrastructure; `gitops` supplies shared application manifests and the AWS overlay.
+`infra/environments/aws/dev` creates AWS infrastructure; `gitops` supplies shared application manifests and the AWS overlay.
 Each resource has one manager. This repository does not provision EKS or RDS.
 
 | Owner | Resources |
 | --- | --- |
-| Terraform foundation in `infra-aws/terraform/foundation` | VPC, subnets, routes, frontend security group, EKS, managed EC2 node groups, private RDS, and controller IAM/Pod Identity permissions |
-| Terraform platform in `infra-aws/terraform/platform` | Argo CD and AWS Load Balancer Controller Helm installations, including the `alb` IngressClass |
-| Terraform edge in `infra-aws/terraform/edge` | CloudFront VPC origin/distribution, functions, response headers and access-log delivery/storage |
+| Terraform foundation in `infra/environments/aws/dev/foundation` | VPC, subnets, routes, frontend security group, EKS, managed EC2 node groups, private RDS, and controller IAM/Pod Identity permissions |
+| Terraform platform in `infra/environments/aws/dev/platform` | Argo CD and AWS Load Balancer Controller Helm installations, including the `alb` IngressClass |
+| Terraform edge in `infra/environments/aws/dev/edge` | CloudFront VPC origin/distribution, functions, response headers and access-log delivery/storage |
 | Argo CD from `gitops` | ApplicationSet, app Deployment, Service, ConfigMaps, migration Job and Ingress |
 | AWS Load Balancer Controller | ALBs, target groups and related resources reconciled from Ingress resources |
 | Separate credential provisioning | Argo CD Git access, app database Secret and GHCR pull Secret |
 
 Terraform must not also manage ALBs or target groups created by the controller,
 or app resources managed by Argo CD. Use the controller/chart pins already
-selected in `infra-aws`; this repo expects their CRDs to be installed first.
+selected in `infra/environments/aws/dev`; this repo expects their CRDs to be installed first.
 
 ## Required infrastructure
 
@@ -77,7 +77,7 @@ controller-managed target networking. Kubernetes liveness uses `/health`.
 Hostnames and ARNs are configuration and may be committed. Passwords, tokens,
 private keys, Terraform state and kubeconfig credentials must stay outside Git.
 
-S3 is not needed by the current app. `infra-aws` can use a separate S3 bucket for
+S3 is not needed by the current app. `infra/environments/aws/dev` can use a separate S3 bucket for
 Terraform state with versioning, encryption, restricted access and state locking.
 It must bootstrap that backend before configuring Terraform to use it.
 
@@ -102,10 +102,10 @@ required. The foundation state keeps `dev/terraform.tfstate`, platform uses
 `dev/platform/terraform.tfstate`, edge uses `dev/edge/terraform.tfstate`.
 
 ```sh
-terraform -chdir=../infra-aws/terraform/foundation output eks_cluster_name
-terraform -chdir=../infra-aws/terraform/foundation output database
-terraform -chdir=../infra-aws/terraform/foundation output myfastapiapp_alb_security_group
-terraform -chdir=../infra-aws/terraform/edge output myfastapiapp_https
+terraform -chdir=../infra/environments/aws/dev/foundation output eks_cluster_name
+terraform -chdir=../infra/environments/aws/dev/foundation output database
+terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group
+terraform -chdir=../infra/environments/aws/dev/edge output myfastapiapp_https
 ```
 
 Discovery uses AWS metadata, not another root's sensitive remote state. Read

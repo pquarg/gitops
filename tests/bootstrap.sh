@@ -56,6 +56,11 @@ for env in local aws; do
     else
       [[ "$result" != 0 ]] || fail "$env $scenario must fail"
       if grep -q '<apply>' "$tmp/log"; then fail 'failure must stop registration'; fi
+      if [[ "$scenario" == class ]]; then
+        infrastructure_target=local
+        if [[ "$env" == aws ]]; then infrastructure_target=aws/dev; fi
+        grep -q "infra/environments/$infrastructure_target first" "$tmp/out" || fail 'current infrastructure prerequisite path'
+      fi
     fi
   done
 done
