@@ -42,7 +42,7 @@ for app_directory in "${app_directories[@]}"; do
     printf 'Error: app name %s must be a DNS label of at most 63 characters.\n' "$app_name" >&2; exit 1
   fi
   case "$app_name" in
-    argocd|traefik|default|bootstrap|root|kube-*) printf 'Error: reserved app name %s.\n' "$app_name" >&2; exit 1 ;;
+    argocd|traefik|default|apps|bootstrap|root|kube-*) printf 'Error: reserved app name %s.\n' "$app_name" >&2; exit 1 ;;
   esac
   if [[ ! -f "$app_directory/base/kustomization.yaml" ]]; then
     printf 'Error: %s needs base/kustomization.yaml.\n' "$app_directory" >&2; exit 1
@@ -67,9 +67,7 @@ for selected in "${environments[@]}"; do
     kubectl kustomize "$overlay" > "$render_dir/$selected-$app_name.yaml"
   done
   kubectl kustomize "argocd/$selected" > "$render_dir/$selected-registrations.yaml"
-  root_file=staging.yaml
-  if [[ "$selected" == aws ]]; then root_file=aws.yaml; fi
-  cp "root/$root_file" "$render_dir/$selected-root.yaml"
+  cp "bootstrap/$selected.yaml" "$render_dir/$selected-bootstrap.yaml"
 done
 if [[ "$ready" == true ]]; then
   python3 - "$render_dir" <<'PY'

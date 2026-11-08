@@ -23,7 +23,7 @@ ALB and targets. Terraform must never import those resources.
 Keep deterministic name `deployment-project-dev-app`, internal IPv4 scheme,
 HTTP port 80, IP targets, `/ready` health check, controller backend-rule management
 and no host-specific rule. Preserve the application name, namespace and image.
-Follow [setup](setup.md) to validate/publish and register `root`, then manually
+Follow [setup](setup.md) to validate/publish and register `bootstrap`, then manually
 sync the full app including its migration hook.
 
 ## 3. Verify the origin

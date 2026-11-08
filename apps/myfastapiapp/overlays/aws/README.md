@@ -7,7 +7,7 @@ Application code, Dockerfile and Alembic revisions live in the separate
 | Setting | Value |
 | --- | --- |
 | Namespace | `myfastapiapp` |
-| Argo CD Application | `aws-myfastapiapp` |
+| Argo CD Application | `myfastapiapp` |
 | Initial image | `ghcr.io/pquarg/myfastapiapp:0.1.12` |
 | Database | Private RDS PostgreSQL, provisioned through `infra/environments/aws/dev` |
 | Public URL | Read `myfastapiapp_https` from `infra/environments/aws/dev/edge` after edge provisioning |
@@ -105,8 +105,8 @@ public ALB listener, custom domain or ACM requirement for this initial setup.
 ./scripts/validate-server.sh myfastapiapp --environment aws --context "$EKS_CONTEXT"
 ```
 
-Publish the checked configuration to `main` and bootstrap the root Application.
-In Argo CD, review and sync the **entire** `aws-myfastapiapp` Application. A selective
+Publish the checked configuration to `main` and bootstrap the bootstrap Application.
+In Argo CD, review and sync the **entire** `myfastapiapp` Application. A selective
 resource sync skips hooks and must not be used for an app release.
 
 Sync order is:
@@ -124,7 +124,7 @@ changes must remain compatible with the running app or use a planned maintenance
 ## Verify
 
 ```sh
-kubectl --context "$EKS_CONTEXT" -n argocd get application aws-myfastapiapp
+kubectl --context "$EKS_CONTEXT" -n argocd get application myfastapiapp
 kubectl --context "$EKS_CONTEXT" -n myfastapiapp \
   rollout status deployment/myfastapiapp-deployment --timeout=300s
 kubectl --context "$EKS_CONTEXT" -n myfastapiapp get pods,jobs,ingress

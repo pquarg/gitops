@@ -33,13 +33,13 @@ See the [infrastructure contract](infrastructure.md) for the full handoff.
 
 ```mermaid
 flowchart TD
-    Operator[Operator runs bootstrap.sh with AWS environment and context] --> Root[root Application]
-    Git[gitops on GitHub: main] --> Root
-    Root --> Registrations[argocd/aws Kustomization]
-    Registrations --> AppSet[aws-apps ApplicationSet]
+    Operator[Operator runs bootstrap.sh with AWS environment and context] --> Bootstrap[bootstrap Application]
+    Git[gitops on GitHub: main] --> Bootstrap
+    Bootstrap --> Registrations[argocd/aws Kustomization]
+    Registrations --> AppSet[apps ApplicationSet]
     Git --> AppSet
     AppSet --> Discovery[Discover apps/*/overlays/aws]
-    Discovery --> App[aws-myfastapiapp Application]
+    Discovery --> App[myfastapiapp Application]
     Git --> App
     App --> Render[Combine shared base and AWS overlay]
     Render --> Sync[Operator starts a full app sync]
@@ -48,14 +48,14 @@ flowchart TD
     Controller --> ALB[Internal ALB and target groups]
 ```
 
-The registration chain starts at [root/aws.yaml](../../root/aws.yaml). It defines
-the `root` Argo CD Application on EKS, which reads `argocd/aws/` from GitHub `main`.
-The root automatically syncs registrations and corrects drift in them.
+The registration chain starts at [bootstrap/aws.yaml](../../bootstrap/aws.yaml). It defines
+the `bootstrap` Argo CD Application on EKS, which reads `argocd/aws/` from GitHub `main`.
+The bootstrap Application automatically syncs registrations and corrects drift in them.
 
 [argocd/aws/apps.yaml](../../argocd/aws/apps.yaml) defines an **ApplicationSet**, a template
 that discovers each `apps/*/overlays/aws` directory on `main`. For each
 entry it extracts the app name from path segment 1 and generates an Argo CD
-Application named `aws-<app>` targeting namespace `<app>`. Today this produces `aws-myfastapiapp` in the Argo CD
+Application named `<app>` targeting namespace `<app>`. Today this produces `myfastapiapp` in the Argo CD
 namespace, deploying workloads into namespace `myfastapiapp`.
 
 Each generated Application points at its AWS overlay's **Kustomization**, which
@@ -65,7 +65,7 @@ an operator reviews the diff and starts the app sync.
 
 [scripts/bootstrap.sh](../../scripts/bootstrap.sh), using
 `--environment aws --context CONTEXT`, validates the manifests,
-checks the existing platform components and registers `root`. It requires an
+checks the existing platform components and registers `bootstrap`. It requires an
 explicit Kubernetes context. It does not provision the platform or start the
 app's manual sync. Argo CD reads the published `main` branch, so local edits must
 be pushed before they can be deployed.
@@ -151,7 +151,7 @@ The first deployment has a dependency order:
    frontend SG/rules, then `terraform/platform` for the two Helm releases.
 2. Provision Git access, the app database login/connection Secret and the GHCR
    pull Secret. Set the Ingress security-group ID from the infrastructure output.
-3. Validate and publish the manifests, bootstrap the root registration, then
+3. Validate and publish the manifests, bootstrap the registration, then
    review and manually sync the entire app.
 4. Wait for the internal ALB and healthy targets, then provision its CloudFront
    VPC origin and distribution through `infra/environments/aws/dev`.

@@ -22,18 +22,18 @@ while (( $# )); do
   esac
 done
 if [[ -z "$context" ]]; then usage >&2; exit 1; fi
-root_name=root
+bootstrap_name=bootstrap
 case "$environment" in
   local)
     if [[ "$context" != kind-* ]]; then
       printf 'Error: local registration requires an explicit kind-* context.\n' >&2; exit 1
     fi
-    root_file=staging.yaml ;;
+    bootstrap_file=local.yaml ;;
   aws)
     if [[ "$context" == kind-* ]]; then
       printf 'Error: AWS registration cannot target a kind context.\n' >&2; exit 1
     fi
-    root_file=aws.yaml ;;
+    bootstrap_file=aws.yaml ;;
   *) usage >&2; exit 1 ;;
 esac
 # Select one file consistently instead of an ambient kubeconfig list.
@@ -48,9 +48,27 @@ kube=(kubectl "--kubeconfig=$kubeconfig" "--context=$context")
 "${kube[@]}" get nodes > /dev/null
 "${kube[@]}" -n argocd wait --for=condition=Established \
   crd/applications.argoproj.io crd/applicationsets.argoproj.io --timeout=120s
-registered_root="$("${kube[@]}" -n argocd get application "$root_name" --ignore-not-found -o jsonpath='{.metadata.name}:{.spec.source.path}')"
-if [[ -n "$registered_root" && "$registered_root" != "$root_name:argocd/$environment" ]]; then
-  printf 'Error: existing root does not use argocd/%s; inspect it before registration.\n' "$environment" >&2
+# Renaming registrations in place can leave two reconcilers owning one workload.
+# Require the non-cascading handoff before creating the new registration chain.
+for legacy in application/root applicationset/staging-apps applicationset/aws-apps; do
+  legacy_registration="$("${kube[@]}" -n argocd get "$legacy" --ignore-not-found -o name)"
+  if [[ -n "$legacy_registration" ]]; then
+    printf 'Error: legacy registration %s exists; follow docs/registration-migration.md first.\n' "$legacy" >&2
+    exit 1
+  fi
+done
+registrations="$("${kube[@]}" -n argocd get applications -o jsonpath='{range .items[*]}{.metadata.name}{":"}{.spec.source.path}{"\n"}{end}')"
+while IFS=: read -r name path; do
+  for prefix in staging aws; do
+    if [[ "$name" == "$prefix-"* && "$path" == "apps/${name#"$prefix-"}/overlays/"* ]]; then
+      printf 'Error: legacy Application %s exists; follow docs/registration-migration.md first.\n' "$name" >&2
+      exit 1
+    fi
+  done
+done <<< "$registrations"
+registered_bootstrap="$("${kube[@]}" -n argocd get application "$bootstrap_name" --ignore-not-found -o jsonpath='{.metadata.name}:{.spec.source.path}')"
+if [[ -n "$registered_bootstrap" && "$registered_bootstrap" != "$bootstrap_name:argocd/$environment" ]]; then
+  printf 'Error: existing bootstrap does not use argocd/%s; inspect it before registration.\n' "$environment" >&2
   exit 1
 fi
 for deployment in argocd-server argocd-repo-server argocd-applicationset-controller; do
@@ -73,9 +91,9 @@ if [[ "$controller" != "$expected_controller" ]]; then
   exit 1
 fi
 printf 'Registering %s applications from gitops/main\n' "$environment"
-"${kube[@]}" -n argocd apply -f "$project_root/root/$root_file"
+"${kube[@]}" -n argocd apply -f "$project_root/bootstrap/$bootstrap_file"
 "${kube[@]}" -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced \
-  "application/$root_name" --timeout=300s
+  "application/$bootstrap_name" --timeout=300s
 if [[ "$environment" == local ]]; then
   printf 'Registrations synced. Automatic app syncs, migrations and rollouts continue through Argo CD.\n'
 else

@@ -2,7 +2,7 @@
 
 Create `apps/<app>/base/kustomization.yaml` for portable Kubernetes resources.
 Use a lowercase DNS label of at most 63 characters. Reserve `argocd`, `traefik`,
-`default`, `bootstrap`, `root` and names starting with `kube-`.
+`default`, `apps`, `bootstrap`, `root` and names starting with `kube-`.
 
 Add `apps/<app>/overlays/local/kustomization.yaml` and/or
 `apps/<app>/overlays/aws/kustomization.yaml`. Each overlay includes `../../base`,
@@ -22,7 +22,7 @@ images:
 
 Local discovery matches `apps/*/overlays/local`; AWS matches `apps/*/overlays/aws`.
 The app name is path segment 1, not the overlay directory name. This produces
-`staging-<app>` or `aws-<app>` targeting namespace `<app>` in its respective cluster.
+`<app>` targeting namespace `<app>` in its respective cluster.
 See [Argo CD Git directory parameters](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators-Git/#git-generator-directories) for path-segment semantics.
 No per-app registration file is needed. Base/resources stay inside this Git
 repository, so Argo CD can render them without sibling checkouts or extra remotes.

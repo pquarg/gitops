@@ -75,10 +75,10 @@ app cleanup; do not remove the frontend SG first. Verify using actual recorded I
 
 ## 4. Pause GitOps and let the controller remove ALBs
 
-Record/pause root and app reconciliation. Let active operations complete. Remove
+Record/pause bootstrap and app reconciliation. Let active operations complete. Remove
 app Ingresses through a reviewed Git change and explicit full app sync/prune, or
 pause both Argo CD reconcilers and remove their live Ingresses deliberately. Do
-not let a parent ApplicationSet/root recreate a removed Ingress. Inspect any
+not let a parent ApplicationSet/bootstrap recreate a removed Ingress. Inspect any
 Application finalizers; do not cascade-delete the app/database by accident.
 
 Keep `aws-load-balancer-controller` and its Pod Identity association/role/agent

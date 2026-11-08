@@ -8,21 +8,32 @@ remains in the independent `../infra` repository.
 
 ```text
 apps/myfastapiapp/
-  base/                         # Shared Deployment, Service and migration Job
+  base/                         # Shared Deployment, Service, ConfigMap and migration Job
   overlays/local/               # Local release, configuration and Traefik
   overlays/aws/                 # AWS release, configuration, ALB and verified RDS TLS
-argocd/local/                   # staging-apps: discovers apps/*/overlays/local
-argocd/aws/                     # aws-apps: discovers apps/*/overlays/aws
-root/staging.yaml               # root Application on kind, local registrations only
-root/aws.yaml                   # root Application on EKS, AWS registrations only
+argocd/local/                   # apps: discovers apps/*/overlays/local
+argocd/aws/                     # apps: discovers apps/*/overlays/aws
+bootstrap/local.yaml            # bootstrap Application on kind, local registrations only
+bootstrap/aws.yaml              # bootstrap Application on EKS, AWS registrations only
 scripts/                        # Common validation/bootstrap and credential helpers
 docs/local/                     # Local setup, credentials and recovery
 docs/aws/                       # AWS setup, infrastructure contract and recovery
 ```
 
-Both clusters use Application `root` in namespace `argocd`. The expected remote
+Both clusters use Application `bootstrap`, ApplicationSet `apps` and Applications
+named `<app>` in namespace `argocd`. Environment identity stays in Git overlay
+paths and explicit command/context selection, without prefixes or environment
+labels on the registrations. The expected remote
 is `git@github.com:pquarg/gitops.git`; publish it and configure read access in
 Argo CD before registration. Local apps sync automatically; AWS apps sync manually.
+
+The app greeting is also shared: `Hello from FastAPI!`. Platform-specific database,
+ingress and TLS settings remain in overlays.
+
+Existing clusters using `root`, `staging-*` or `aws-*` registrations must follow
+the [registration migration](docs/registration-migration.md) **before publishing**
+this naming change. Bootstrap refuses legacy registrations to prevent overlapping
+ownership.
 
 ## Set up an environment
 
@@ -45,7 +56,7 @@ On a prepared cluster, register only the chosen environment:
 
 These commands target separate clusters; run the one you intend to configure.
 `--kubeconfig /absolute/file` selects one kubeconfig file consistently.
-Root sync confirms registration, not app, migration or endpoint health.
+Bootstrap sync confirms registration, not app, migration or endpoint health.
 
 ## Change and promote an app
 

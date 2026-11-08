@@ -18,14 +18,29 @@ printf '\n' >> "$LOG"
 if [[ "$*" == *'rollout status'* && "$CASE" == controller ]]; then exit 42; fi
 if [[ "$*" == *'get ingressclass traefik'* && "$CASE" != class ]]; then echo traefik.io/ingress-controller; fi
 if [[ "$*" == *'get ingressclass alb'* && "$CASE" != class ]]; then echo ingress.k8s.aws/alb; fi
-if [[ "$*" == *'get application root '* ]]; then
-  if [[ "$CASE" == wrong-root ]]; then echo root:argocd/other; fi
-  if [[ "$CASE" == root-without-path ]]; then echo root:; fi
-  if [[ "$CASE" == existing-root ]]; then
-    if [[ "$*" == *'--context=kind-selected'* ]]; then echo root:argocd/local
-    else echo root:argocd/aws; fi
+if [[ "$*" == *'get application bootstrap '* ]]; then
+  if [[ "$CASE" == wrong-bootstrap ]]; then echo bootstrap:argocd/other; fi
+  if [[ "$CASE" == bootstrap-without-path ]]; then echo bootstrap:; fi
+  if [[ "$CASE" == existing-bootstrap ]]; then
+    if [[ "$*" == *'--context=kind-selected'* ]]; then echo bootstrap:argocd/local
+    else echo bootstrap:argocd/aws; fi
   fi
 fi
+case "$*" in
+  *'get application/root '*)
+    if [[ "$CASE" == legacy-query-error ]]; then exit 43; fi
+    if [[ "$CASE" == legacy-root ]]; then echo application.argoproj.io/root; fi ;;
+  *'get applicationset/staging-apps '*)
+    if [[ "$CASE" == legacy-local-set ]]; then echo applicationset.argoproj.io/staging-apps; fi ;;
+  *'get applicationset/aws-apps '*)
+    if [[ "$CASE" == legacy-aws-set ]]; then echo applicationset.argoproj.io/aws-apps; fi ;;
+  *'get applications -o jsonpath='*)
+    if [[ "$CASE" == legacy-local-app ]]; then echo staging-myfastapiapp:apps/myfastapiapp/overlays/local; fi
+    if [[ "$CASE" == legacy-aws-app ]]; then echo aws-myfastapiapp:apps/myfastapiapp/overlays/aws; fi
+    if [[ "$CASE" == unprefixed-app ]]; then echo aws-billing:apps/aws-billing/overlays/aws; fi ;;
+esac
+# Fake read commands succeed even when no resource is found.
+exit 0
 FAKE
 chmod +x "$tmp/repo/scripts/validate.sh" "$tmp/bin/kubectl"
 fail() { cat "$tmp/out" >&2; printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -35,15 +50,15 @@ run() {
     bash "$tmp/repo/scripts/bootstrap.sh" "${@:2}" > "$tmp/out" 2>&1 || result=$?
 }
 for env in local aws; do
-  context=selected; root_file=aws.yaml; platform=aws-load-balancer-controller
-  if [[ "$env" == local ]]; then context=kind-selected; root_file=staging.yaml; platform=traefik; fi
-  for scenario in success existing-root validation controller class wrong-root root-without-path; do
+  context=selected; bootstrap_file=aws.yaml; platform=aws-load-balancer-controller
+  if [[ "$env" == local ]]; then context=kind-selected; bootstrap_file=local.yaml; platform=traefik; fi
+  for scenario in success existing-bootstrap unprefixed-app validation controller class wrong-bootstrap bootstrap-without-path legacy-root legacy-local-set legacy-aws-set legacy-local-app legacy-aws-app legacy-query-error; do
     run "$scenario" --environment "$env" --context "$context" --kubeconfig '/tmp/selected config'
-    if [[ "$scenario" == success || "$scenario" == existing-root ]]; then
+    if [[ "$scenario" == success || "$scenario" == existing-bootstrap || "$scenario" == unprefixed-app ]]; then
       [[ "$result" == 0 ]] || fail "$env success"
       awk 'NR==1 && !/^validate/ {exit 1} /<apply>/ {if (!controller) exit 1; applies++} /rollout/ {controller=1} END {if (applies!=1) exit 1}' "$tmp/log" || fail ordering
-      grep -q "root/$root_file>" "$tmp/log" || fail 'wrong environment root'
-      grep -q '<application/root>' "$tmp/log" || fail 'must wait for the root Application'
+      grep -q "bootstrap/$bootstrap_file>" "$tmp/log" || fail 'wrong environment bootstrap'
+      grep -q '<application/bootstrap>' "$tmp/log" || fail 'must wait for the bootstrap Application'
       grep -q "rollout.*deployment/$platform" "$tmp/log" || fail 'platform readiness missing'
       grep -q "validate --environment $env" "$tmp/log" || fail 'validation environment missing'
       if [[ "$env" == aws ]]; then
@@ -56,6 +71,9 @@ for env in local aws; do
     else
       [[ "$result" != 0 ]] || fail "$env $scenario must fail"
       if grep -q '<apply>' "$tmp/log"; then fail 'failure must stop registration'; fi
+      if [[ "$scenario" == legacy-* && "$scenario" != legacy-query-error ]]; then
+        grep -q 'docs/registration-migration.md' "$tmp/out" || fail 'legacy migration guidance missing'
+      fi
       if [[ "$scenario" == class ]]; then
         infrastructure_target=local
         if [[ "$env" == aws ]]; then infrastructure_target=aws/dev; fi

@@ -10,6 +10,10 @@ and the [validation tools](validation.md). Complete the
 
 GitOps `--environment aws` currently maps to infrastructure `--environment aws/dev`.
 
+For an existing `root` / prefixed-app installation, follow the
+[registration migration](../registration-migration.md) before publishing the new
+names or running bootstrap.
+
 ## 1. Select the project and cluster
 
 Confirm the selected Region in **AWS Settings > View all projects > Overview >
@@ -73,20 +77,20 @@ git diff --check
 ```
 
 Review, commit and push the configuration to `gitops/main`. Argo CD reads
-GitHub and cannot deploy unpushed local changes. Then register the root Application:
+GitHub and cannot deploy unpushed local changes. Then register the bootstrap Application:
 
 ```sh
 ./scripts/bootstrap.sh --environment aws --context "$EKS_CONTEXT"
 ```
 
-The `root` Application automatically reconciles the ApplicationSet. The ApplicationSet creates
-`aws-myfastapiapp`, but **does not sync the app automatically**. Root **Synced**
+The `bootstrap` Application automatically reconciles the ApplicationSet. The ApplicationSet creates
+`myfastapiapp`, but **does not sync the app automatically**. Bootstrap **Synced**
 only confirms its registrations; it does not prove the app is deployed or healthy.
 
 ## 5. Sync and verify the app
 
 Follow the [first deployment](../../apps/myfastapiapp/overlays/aws/README.md#first-deployment) runbook.
-Sync the entire `aws-myfastapiapp` Application so the migration hook runs. After
+Sync the entire `myfastapiapp` Application so the migration hook runs. After
 the internal ALB is Active with healthy targets, follow the
 [CloudFront provisioning batch](public-access.md#4-provision-cloudfront-through-terraform).
 Then verify the assigned public HTTPS address, `/health`, `/ready`, redirects,

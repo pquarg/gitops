@@ -1,4 +1,4 @@
-# myfastapiapp staging deployment
+# myfastapiapp local deployment
 
 Run commands from `gitops`. Source, image builds and Alembic revisions live in
 the separate `../apps/myfastapiapp` repository; the deployment database is
@@ -8,7 +8,7 @@ provisioned by `infra/environments/local`.
 | --- | --- |
 | Cluster context | `kind-deployment` |
 | Namespace | `myfastapiapp` |
-| Argo CD Application | `staging-myfastapiapp` |
+| Argo CD Application | `myfastapiapp` |
 | URL | http://myfastapiapp.localhost/api/v1/docs/ |
 | Database endpoint from Pods | `host.docker.internal:5433` (Docker Desktop) |
 
@@ -131,7 +131,7 @@ Database connectivity, app privileges and transactional DDL passed.
 The helper waits for completion for up to 120 seconds, including when the Job
 has already failed. If it looks stuck, inspect the Job in a second terminal
 using [troubleshooting](#troubleshoot-the-first-sync) before it is cleaned up.
-Once the probe passes, continue with [validation and registration](../../../../docs/local/setup.md#4-validate-publish-and-register-staging).
+Once the probe passes, continue with [validation and registration](../../../../docs/local/setup.md#4-validate-publish-and-register-apps).
 
 ## Update configuration or credentials
 
@@ -177,7 +177,7 @@ and infra/environments/local’s deployment database are independent; neither co
 
 ## Verify the deployment
 
-After [bootstrap](../../../../docs/local/setup.md#4-validate-publish-and-register-staging),
+After [bootstrap](../../../../docs/local/setup.md#4-validate-publish-and-register-apps),
 wait for app sync and migration completion. Then:
 
 ```sh
@@ -189,8 +189,8 @@ curl -fsS http://myfastapiapp.localhost/ready
 ```
 
 `/health` checks the API process; `/ready` checks database connectivity. Confirm
-Argo CD reports **Synced / Healthy** for `staging-myfastapiapp` and the intended
-revision. Both HTTP checks should return `{"status":"ok"}`. Root **Synced**
+Argo CD reports **Synced / Healthy** for `myfastapiapp` and the intended
+revision. Both HTTP checks should return `{"status":"ok"}`. Bootstrap **Synced**
 alone does not establish app health: migration wave `0` must succeed before
 the API in wave `1` rolls out.
 Test new registration and login in the [API docs](http://myfastapiapp.localhost/api/v1/docs/),
@@ -246,7 +246,7 @@ kubectl --context kind-deployment -n myfastapiapp logs job/myfastapiapp-migrate
 
 After correcting the cause, rerun the database probe. If it passes, allow a
 pending automatic sync retry to run. If the earlier sync has exhausted its
-retries, sync the **entire** `staging-myfastapiapp` Application in Argo CD with
+retries, sync the **entire** `myfastapiapp` Application in Argo CD with
 Prune, Force and Replace off. Selective sync skips migration hooks. Run the
 [deployment verification](#verify-the-deployment) afterward. Applying an
 ignored Secret needs no commit or push; manifest changes must be published.
@@ -273,7 +273,7 @@ if a failed release skipped image publication.
 
 ## Back up and release a database change
 
-1. Disable auto-sync on `staging-myfastapiapp` in Argo CD and wait for active
+1. Disable auto-sync on `myfastapiapp` in Argo CD and wait for active
    syncs/migration Jobs to finish. The ApplicationSet preserves this live pause.
 2. Follow [backup and restore verification](../../../../../infra/environments/local/docs/database.md#backup-and-restore).
    Run the Compose backup helper from `infra/environments/local`. Keep writers paused when

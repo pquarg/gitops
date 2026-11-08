@@ -20,8 +20,9 @@ def render(path):
     return {(r['kind'], r['metadata']['name']): r for r in resources}
 
 
-for env, prefix in [('local', 'staging'), ('aws', 'aws')]:
+for env in ('local', 'aws'):
     resources = render(f'apps/myfastapiapp/overlays/{env}')
+    assert resources['ConfigMap', 'myfastapiapp-config']['data']['APP_MESSAGE'] == 'Hello from FastAPI!'
     deployment = resources['Deployment', 'myfastapiapp-deployment']
     migration = resources['Job', 'myfastapiapp-migrate']
     api_image = deployment['spec']['template']['spec']['containers'][0]['image']
@@ -41,7 +42,9 @@ for env, prefix in [('local', 'staging'), ('aws', 'aws')]:
         assert settings['PGSSLMODE'] == 'verify-full'
         assert pod['securityContext']['runAsNonRoot'] is True
     registrations = render(f'argocd/{env}')
-    appset = registrations['ApplicationSet', f'{prefix}-apps']
+    assert set(registrations) == {('ApplicationSet', 'apps')}
+    appset = registrations['ApplicationSet', 'apps']
+    assert appset['metadata']['namespace'] == 'argocd'
     assert appset['spec']['syncPolicy']['preserveResourcesOnDeletion'] is True
     template = appset['spec']['template']['spec']
     assert template['source']['path'] == '{{.path.path}}'
@@ -49,13 +52,16 @@ for env, prefix in [('local', 'staging'), ('aws', 'aws')]:
     generator = appset['spec']['generators'][0]['git']
     assert generator['directories'] == [{'path': f'apps/*/overlays/{env}'}]
     assert generator['repoURL'] == template['source']['repoURL']
-    root_file = 'staging.yaml' if env == 'local' else 'aws.yaml'
     root = json.loads(subprocess.check_output(
-        ['kubectl', 'patch', '--local', '-f', str(ROOT / 'root' / root_file),
+        ['kubectl', 'patch', '--local', '-f', str(ROOT / 'bootstrap' / f'{env}.yaml'),
          '--type=merge', '-p', '{}', '-o', 'json'], text=True))
-    assert root['metadata']['name'] == 'root'
+    assert root['metadata']['name'] == 'bootstrap'
+    assert root['metadata']['namespace'] == 'argocd'
+    assert 'environment' not in root['metadata'].get('labels', {})
+    assert root['spec']['syncPolicy']['automated']['enabled'] is True
     assert root['spec']['source']['path'] == f'argocd/{env}'
     assert root['spec']['source']['repoURL'] == generator['repoURL']
-    assert appset['spec']['template']['metadata']['name'] == prefix + '-{{index .path.segments 1}}'
+    assert appset['spec']['template']['metadata']['name'] == '{{index .path.segments 1}}'
+    assert 'environment' not in appset['spec']['template']['metadata'].get('labels', {})
     assert bool(template['syncPolicy'].get('automated')) == (env == 'local')
 print('Rendered environment isolation, external database and image consistency checks passed.')

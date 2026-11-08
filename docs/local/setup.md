@@ -4,6 +4,10 @@ Run commands from `gitops` unless stated otherwise. The default cluster is
 `deployment`, context `kind-deployment`. App sync connects to a separately
 provisioned Compose database; it does not create PostgreSQL or mount storage.
 
+For an existing `root` / prefixed-app installation, follow the
+[registration migration](../registration-migration.md) before publishing the new
+names or running bootstrap.
+
 ## 1. Prepare the platform with infra/environments/local
 
 Follow [infra/environments/local's README](../../../infra/environments/local/README.md) to provision separate
@@ -43,7 +47,7 @@ Under **Settings → Repositories**, connect
 `git@github.com:pquarg/gitops.git` with a read-only Git credential usable
 by the `default` project. Argo CD must show the repository connection as
 successful before registration. If using another remote, update every
-`repoURL` in `root/staging.yaml` and `argocd/local/apps.yaml` to match it.
+`repoURL` in `bootstrap/local.yaml` and `argocd/local/apps.yaml` to match it.
 
 This credential reads deployment manifests. App registry credentials are
 separate and belong in each app's namespace. No credential for an `infra/environments/local`
@@ -79,7 +83,7 @@ The same release image is used for the API and its migration Job. Build and
 publish it, or load that exact image into the local kind cluster. Database
 credentials and filled Secret files stay outside Git and Kustomize.
 
-## 4. Validate, publish and register staging
+## 4. Validate, publish and register apps
 
 Install the [validation tools](../validation.md), then run:
 
@@ -99,13 +103,13 @@ kubectl --context kind-deployment -n argocd get applications
 ```
 
 The script validates first, checks the Argo CD controllers and shared ingress, then applies only
-`root`. The root manages the ApplicationSet in `argocd/local/kustomization.yaml`.
+`bootstrap`. The bootstrap Application manages the ApplicationSet in `argocd/local/kustomization.yaml`.
 It discovers every `apps/*/overlays/local` entry point and creates an independent Application,
-including `staging-myfastapiapp` in namespace `myfastapiapp`. Each app runs
+including `myfastapiapp` in namespace `myfastapiapp`. Each app runs
 migrations against the existing database and rolls out the API. Traefik
 is managed separately by `infra/environments/local`.
 
-Root **Synced** means registration was applied; wait for the app's own
+Bootstrap **Synced** means registration was applied; wait for the app's own
 **Synced / Healthy** status before testing. Follow its
 [verification procedure](../../apps/myfastapiapp/overlays/local/README.md#verify-the-deployment).
 The HTTP route is localhost port 80 → kind node port 30080 → shared Traefik →

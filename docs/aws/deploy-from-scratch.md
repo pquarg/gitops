@@ -94,8 +94,8 @@ git diff --check
 ```
 
 The bootstrap validates first, verifies CRDs/controllers/IngressClass and applies
-only the `root` registration. Root Synced confirms registration, not app health or
-migration success. App `aws-myfastapiapp` remains **manually synced**. Perform a
+only the `bootstrap` registration. Bootstrap Synced confirms registration, not app health or
+migration success. App `myfastapiapp` remains **manually synced**. Perform a
 full sync with Force/Replace off so its migration hook runs; verify logs, Alembic
 revision, app readiness and database access using the app runbook.
 
