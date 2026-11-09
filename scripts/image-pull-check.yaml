@@ -3,8 +3,8 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: myfastapiapp-image-pull-check
-  namespace: myfastapiapp
+  name: demo-api-image-pull-check
+  namespace: demo-api
 spec:
   restartPolicy: Never
   activeDeadlineSeconds: 300
@@ -19,7 +19,7 @@ spec:
     - name: registry-credentials
   containers:
     - name: image-pull-check
-      image: ghcr.io/pquarg/myfastapiapp:0.1.12
+      image: ghcr.io/pquarg/demo-api:0.1.13
       imagePullPolicy: Always
       command: [python, -c, 'print("GHCR image pull OK")']
       securityContext:

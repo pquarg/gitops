@@ -1,10 +1,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: myfastapiapp-ingress
+  name: demo-api
   annotations:
     argocd.argoproj.io/sync-wave: "2"
-    alb.ingress.kubernetes.io/load-balancer-name: deployment-project-dev-app
+    alb.ingress.kubernetes.io/load-balancer-name: dev-demo-api
     alb.ingress.kubernetes.io/scheme: internal
     alb.ingress.kubernetes.io/ip-address-type: ipv4
     alb.ingress.kubernetes.io/target-type: ip
@@ -27,6 +27,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: myfastapiapp-service
+                name: demo-api
                 port:
                   number: 80

@@ -1,5 +1,8 @@
 # Set up AWS deployments
 
+For an existing `myfastapiapp` deployment or old ALB origin, use the
+[app rename and AWS origin handoff](../app-rename.md) before publication or sync.
+
 For the complete infrastructure-to-public-HTTPS walkthrough, use
 [deploy from start to finish](deploy-from-scratch.md). This page is the shorter
 cluster/application setup reference. For removal, use [teardown](teardown.md).
@@ -56,12 +59,12 @@ enabled and provision the private key outside Git. See
 
 ## 3. Configure the app
 
-Check the frontend security-group ID in `apps/myfastapiapp/overlays/aws/ingress.yaml` against
+Check the frontend security-group ID in `apps/demo-api/overlays/aws/ingress.yaml` against
 `terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group`. Its scheme must
 remain `internal`, with the HTTP port 80 listener and controller-managed backend
 rules. No custom hostname or ACM certificate is needed for this origin.
 Provision its namespace, database connection and
-image pull credentials using the [app runbook](../../apps/myfastapiapp/overlays/aws/README.md).
+image pull credentials using the [app runbook](../../apps/demo-api/overlays/aws/README.md).
 Confirm the selected image is published and the RDS database is available.
 
 The public RDS CA bundle is already committed. Kustomize generates a ConfigMap
@@ -72,7 +75,7 @@ There is no Postgres Pod, PVC or laptop storage to provision here.
 
 ```sh
 ./scripts/validate.sh
-./scripts/validate.sh --environment aws --ready
+./scripts/validate.sh --environment aws --no-placeholders
 git diff --check
 ```
 
@@ -84,13 +87,13 @@ GitHub and cannot deploy unpushed local changes. Then register the bootstrap App
 ```
 
 The `bootstrap` Application automatically reconciles the ApplicationSet. The ApplicationSet creates
-`myfastapiapp`, but **does not sync the app automatically**. Bootstrap **Synced**
+`demo-api`, but **does not sync the app automatically**. Bootstrap **Synced**
 only confirms its registrations; it does not prove the app is deployed or healthy.
 
 ## 5. Sync and verify the app
 
-Follow the [first deployment](../../apps/myfastapiapp/overlays/aws/README.md#first-deployment) runbook.
-Sync the entire `myfastapiapp` Application so the migration hook runs. After
+Follow the [first deployment](../../apps/demo-api/overlays/aws/README.md#first-deployment) runbook.
+Sync the entire `demo-api` Application so the migration hook runs. After
 the internal ALB is Active with healthy targets, follow the
 [CloudFront provisioning batch](public-access.md#4-provision-cloudfront-through-terraform).
 Then verify the assigned public HTTPS address, `/health`, `/ready`, redirects,

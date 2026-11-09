@@ -1,17 +1,21 @@
-# myfastapiapp on AWS
+# demo-api on AWS
+
+The desired namespace is `demo-api`; RDS database/login remain `myfastapiapp`.
+For existing installations, follow the [app and ALB handoff](../../../../docs/app-rename.md)
+before publication or sync. Keep the current database password when preparing the new Secret.
 
 Run commands from the deployment repository root with an explicit `EKS_CONTEXT`.
 Application code, Dockerfile and Alembic revisions live in the separate
-`myfastapiapp` repository.
+`demo-api` repository.
 
 | Setting | Value |
 | --- | --- |
-| Namespace | `myfastapiapp` |
-| Argo CD Application | `myfastapiapp` |
-| Initial image | `ghcr.io/pquarg/myfastapiapp:0.1.12` |
+| Namespace | `demo-api` |
+| Argo CD Application | `demo-api` |
+| Initial image | `ghcr.io/pquarg/demo-api:0.1.13` |
 | Database | Private RDS PostgreSQL, provisioned through `infra/environments/aws/dev` |
 | Public URL | Read `myfastapiapp_https` from `infra/environments/aws/dev/edge` after edge provisioning |
-| Origin | Internal ALB `deployment-project-dev-app`, HTTP port 80 |
+| Origin | Internal ALB `dev-demo-api`, HTTP port 80 |
 
 The app has one replica initially. This is a starting deployment, not a configured
 high-availability service. Increase capacity and test disruption behavior when
@@ -23,11 +27,11 @@ For this project's existing Terraform-managed RDS instance, initialize the fresh
 database from the deployment repository root:
 
 ```sh
-python3 scripts/bootstrap-database.py aws-deployment-project --profile aws-project
+python3 scripts/bootstrap-demo-api-rds.py aws-deployment-project --profile aws-project
 ```
 
 The helper verifies the AWS project and Kubernetes context, creates this namespace
-and `myfastapiapp-secrets`, and runs a temporary PostgreSQL 17 client inside EKS.
+and `demo-api-secrets`, and runs a temporary PostgreSQL 17 client inside EKS.
 It reads the administrator password locally through AWS CLI and sends it over
 the Kubernetes exec input stream. It never saves the administrator password to
 a local file, command argument, or Kubernetes Secret. The app password is generated
@@ -55,11 +59,11 @@ If the app login has instead been provisioned separately, use these manual steps
 Create the namespace, then prepare the ignored Secret file:
 
 ```sh
-kubectl --context "$EKS_CONTEXT" create namespace myfastapiapp \
+kubectl --context "$EKS_CONTEXT" create namespace demo-api \
   --dry-run=client -o yaml | kubectl --context "$EKS_CONTEXT" apply -f -
-cp -n apps/myfastapiapp/overlays/aws/app-secrets.example.yaml apps/myfastapiapp/overlays/aws/app-secrets.yaml
-chmod 600 apps/myfastapiapp/overlays/aws/app-secrets.yaml
-git check-ignore apps/myfastapiapp/overlays/aws/app-secrets.yaml
+cp -n apps/demo-api/overlays/aws/app-secrets.example.yaml apps/demo-api/overlays/aws/app-secrets.yaml
+chmod 600 apps/demo-api/overlays/aws/app-secrets.yaml
+git check-ignore apps/demo-api/overlays/aws/app-secrets.yaml
 ```
 
 Set `AUTH_DATABASE_URL` in that local file using the app login provided for RDS:
@@ -78,8 +82,8 @@ ConfigMap from `certs/global-bundle.pem`. Keep certificate verification enabled;
 check the RDS endpoint and CA bundle if verification fails.
 
 ```sh
-kubectl --context "$EKS_CONTEXT" -n myfastapiapp apply \
-  -f apps/myfastapiapp/overlays/aws/app-secrets.yaml
+kubectl --context "$EKS_CONTEXT" -n demo-api apply \
+  -f apps/demo-api/overlays/aws/app-secrets.yaml
 ```
 
 Provision `registry-credentials` in the same namespace using the
@@ -95,18 +99,18 @@ these manifests do not copy local data.
 
 Verify the frontend group configured in `ingress.yaml` matches
 `terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group`. The manifest
-uses internal ALB `deployment-project-dev-app`, HTTP port 80, IP targets and
+uses internal ALB `dev-demo-api`, HTTP port 80, IP targets and
 controller-managed backend rules. The host-independent rule accepts the eventual
 CloudFront viewer hostname. HTTPS will terminate at CloudFront; there is no
 public ALB listener, custom domain or ACM requirement for this initial setup.
 
 ```sh
-./scripts/validate.sh --environment aws --ready
-./scripts/validate-server.sh myfastapiapp --environment aws --context "$EKS_CONTEXT"
+./scripts/validate.sh --environment aws --no-placeholders
+./scripts/validate-server.sh demo-api --environment aws --context "$EKS_CONTEXT"
 ```
 
 Publish the checked configuration to `main` and bootstrap the bootstrap Application.
-In Argo CD, review and sync the **entire** `myfastapiapp` Application. A selective
+In Argo CD, review and sync the **entire** `demo-api` Application. A selective
 resource sync skips hooks and must not be used for an app release.
 
 Sync order is:
@@ -124,13 +128,13 @@ changes must remain compatible with the running app or use a planned maintenance
 ## Verify
 
 ```sh
-kubectl --context "$EKS_CONTEXT" -n argocd get application myfastapiapp
-kubectl --context "$EKS_CONTEXT" -n myfastapiapp \
-  rollout status deployment/myfastapiapp-deployment --timeout=300s
-kubectl --context "$EKS_CONTEXT" -n myfastapiapp get pods,jobs,ingress
-kubectl --context "$EKS_CONTEXT" -n myfastapiapp \
-  logs job/myfastapiapp-migrate
-kubectl --context "$EKS_CONTEXT" -n myfastapiapp get ingress myfastapiapp-ingress \
+kubectl --context "$EKS_CONTEXT" -n argocd get application demo-api
+kubectl --context "$EKS_CONTEXT" -n demo-api \
+  rollout status deployment/demo-api --timeout=300s
+kubectl --context "$EKS_CONTEXT" -n demo-api get pods,jobs,ingress
+kubectl --context "$EKS_CONTEXT" -n demo-api \
+  logs job/demo-api-migrate
+kubectl --context "$EKS_CONTEXT" -n demo-api get ingress demo-api \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 ```
 
@@ -141,8 +145,8 @@ app URL. First verify the migration succeeded and the ALB targets are healthy.
 For a local check before CloudFront is provisioned, run this in another terminal:
 
 ```sh
-kubectl --context "$EKS_CONTEXT" -n myfastapiapp \
-  port-forward service/myfastapiapp-service 8000:80
+kubectl --context "$EKS_CONTEXT" -n demo-api \
+  port-forward service/demo-api 8000:80
 ```
 
 Then check `http://localhost:8000/health` and `http://localhost:8000/ready`.
@@ -200,10 +204,10 @@ Secret does not change the database role's password. Secret environment variable
 do not update in running Pods; after applying the updated Secret, restart the API:
 
 ```sh
-kubectl --context "$EKS_CONTEXT" -n myfastapiapp \
-  rollout restart deployment/myfastapiapp-deployment
-kubectl --context "$EKS_CONTEXT" -n myfastapiapp \
-  rollout status deployment/myfastapiapp-deployment --timeout=300s
+kubectl --context "$EKS_CONTEXT" -n demo-api \
+  rollout restart deployment/demo-api
+kubectl --context "$EKS_CONTEXT" -n demo-api \
+  rollout status deployment/demo-api --timeout=300s
 ```
 
 The next migration Job uses the new Secret. Keep image-pull credentials current

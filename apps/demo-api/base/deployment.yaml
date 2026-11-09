@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: myfastapiapp-deployment
+  name: demo-api
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: myfastapiapp-pod # Matches template.metadata.labels below.
+      app: demo-api # Matches template.metadata.labels below.
   template:
     metadata:
       labels:
-        app: myfastapiapp-pod # Also selected by service.yaml's spec.selector.
+        app: demo-api # Also selected by service.yaml's spec.selector.
     spec:
       imagePullSecrets:
         - name: registry-credentials
       containers:
-        - name: myfastapiapp-container
+        - name: api
           # The app's kustomization.yaml supplies the release tag.
-          image: ghcr.io/pquarg/myfastapiapp
+          image: ghcr.io/pquarg/demo-api
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -28,12 +28,12 @@ spec:
             - name: AUTH_DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: myfastapiapp-secrets
+                  name: demo-api-secrets
                   key: AUTH_DATABASE_URL
             - name: APP_MESSAGE
               valueFrom:
                 configMapKeyRef:
-                  name: myfastapiapp-config
+                  name: demo-api-config
                   key: APP_MESSAGE
           readinessProbe:
             httpGet:

@@ -21,15 +21,15 @@ def render(path):
 
 
 for env in ('local', 'aws'):
-    resources = render(f'apps/myfastapiapp/overlays/{env}')
-    assert resources['ConfigMap', 'myfastapiapp-config']['data']['APP_MESSAGE'] == 'Hello from FastAPI!'
-    deployment = resources['Deployment', 'myfastapiapp-deployment']
-    migration = resources['Job', 'myfastapiapp-migrate']
+    resources = render(f'apps/demo-api/overlays/{env}')
+    assert resources['ConfigMap', 'demo-api-config']['data']['APP_MESSAGE'] == 'Hello from FastAPI!'
+    deployment = resources['Deployment', 'demo-api']
+    migration = resources['Job', 'demo-api-migrate']
     api_image = deployment['spec']['template']['spec']['containers'][0]['image']
     job_image = migration['spec']['template']['spec']['containers'][0]['image']
     assert api_image == job_image, f'{env}: API and migration must use the same release'
     assert migration['metadata']['annotations']['argocd.argoproj.io/hook'] == 'Sync'
-    ingress = resources['Ingress', 'myfastapiapp-ingress']
+    ingress = resources['Ingress', 'demo-api']
     assert ingress['spec']['ingressClassName'] == ('traefik' if env == 'local' else 'alb')
     if env == 'local':
         assert not any(kind in ('PersistentVolume', 'PersistentVolumeClaim', 'StatefulSet') for kind, name in resources), 'Local app sync must not provision database/storage'

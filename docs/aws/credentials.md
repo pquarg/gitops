@@ -6,7 +6,7 @@ Create the app's namespace before provisioning Secrets. Image pull Secrets must
 exist in every namespace that consumes them. See [adding apps](adding-apps.md).
 
 Database credentials and connection settings belong to the app. Start with
-[myfastapiapp credentials](../../apps/myfastapiapp/overlays/aws/README.md#provision-credentials).
+[demo-api credentials](../../apps/demo-api/overlays/aws/README.md#provision-credentials).
 The shared Git credential used by Argo CD is configured during
 [cluster setup](setup.md#2-verify-platform-components-and-git-access).
 
@@ -18,7 +18,7 @@ The Deployment references a Kubernetes Secret with these settings:
 | --- | --- |
 | Cluster context | `$EKS_CONTEXT` (explicit EKS context) |
 | Secret name | `registry-credentials` |
-| Namespace | The same namespace as the app; `myfastapiapp` in the example below |
+| Namespace | The same namespace as the app; `demo-api` in the example below |
 | Secret type | `kubernetes.io/dockerconfigjson` |
 | Registry | `ghcr.io` |
 
@@ -41,17 +41,17 @@ server-side apply to create or update `registry-credentials`, without storing
 a client-side last-applied copy of the credential.
 
 ```sh
-python3 scripts/configure-registry.py aws-deployment-project YOUR_GITHUB_USERNAME
+python3 scripts/configure-ghcr-credentials.py aws-deployment-project YOUR_GITHUB_USERNAME
 ```
 
-The default namespace is `myfastapiapp`; pass `--namespace OTHER_NAMESPACE` for
+The default namespace is `demo-api`; pass `--namespace OTHER_NAMESPACE` for
 another app. Replace the explicit context when targeting another cluster.
 Secret creation alone does not verify the PAT's scope, package access or expiry.
 
 To confirm the Secret exists without displaying its credentials:
 
 ```sh
-kubectl --context aws-deployment-project -n myfastapiapp get secret registry-credentials \
+kubectl --context aws-deployment-project -n demo-api get secret registry-credentials \
   -o 'custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type'
 ```
 
@@ -60,21 +60,21 @@ the credential works. Test the pinned app image using this temporary Pod; it onl
 prints a message and does not start the API or run migrations:
 
 ```sh
-kubectl --context aws-deployment-project -n myfastapiapp \
-  delete pod myfastapiapp-image-pull-check --ignore-not-found
+kubectl --context aws-deployment-project -n demo-api \
+  delete pod demo-api-image-pull-check --ignore-not-found
 kubectl --context aws-deployment-project apply -f scripts/image-pull-check.yaml &&
-kubectl --context aws-deployment-project -n myfastapiapp \
+kubectl --context aws-deployment-project -n demo-api \
   wait --for=jsonpath='{.status.phase}'=Succeeded \
-  pod/myfastapiapp-image-pull-check --timeout=180s &&
-kubectl --context aws-deployment-project -n myfastapiapp \
-  logs pod/myfastapiapp-image-pull-check &&
-kubectl --context aws-deployment-project -n myfastapiapp \
-  delete pod myfastapiapp-image-pull-check
+  pod/demo-api-image-pull-check --timeout=180s &&
+kubectl --context aws-deployment-project -n demo-api \
+  logs pod/demo-api-image-pull-check &&
+kubectl --context aws-deployment-project -n demo-api \
+  delete pod demo-api-image-pull-check
 ```
 
 `imagePullPolicy: Always` requires registry resolution even when the image is
 cached on a worker. Expect `GHCR image pull OK`. If the wait fails, inspect
-`kubectl --context aws-deployment-project -n myfastapiapp describe pod myfastapiapp-image-pull-check`
+`kubectl --context aws-deployment-project -n demo-api describe pod demo-api-image-pull-check`
 before retrying. The Pod has a five-minute deadline and no service account token
 or database credentials. Its image tag should match the app's Kustomize release
 when testing a future release.

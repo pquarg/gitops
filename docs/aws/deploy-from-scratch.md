@@ -68,16 +68,16 @@ it reads EKS metadata without another root's sensitive state.
 Follow [setup](setup.md#2-verify-platform-components-and-git-access) to open the
 private Argo CD UI and configure read access to
 `git@github.com:pquarg/gitops.git`. Keep SSH host verification enabled.
-Follow the [app runbook](../../apps/myfastapiapp/overlays/aws/README.md) and
+Follow the [app runbook](../../apps/demo-api/overlays/aws/README.md) and
 [credential guide](credentials.md) to provision:
 
-- Namespace `myfastapiapp`, its RDS app login/schema permissions and database
+- Namespace `demo-api`, its RDS app login/schema permissions and database
   Secret. The database helper uses AWS discovery; it does not read Terraform state.
 - `registry-credentials` for the selected published GHCR image. Preserve the
   existing release tag and worker architecture; publish a new image in the app repo
   for a new release rather than changing infrastructure pins.
-- The frontend SG annotation in `apps/myfastapiapp/overlays/aws/ingress.yaml`, using foundation's
-  `myfastapiapp_alb_security_group` output. Keep ALB name `deployment-project-dev-app`,
+- The frontend SG annotation in `apps/demo-api/overlays/aws/ingress.yaml`, using foundation's
+  `myfastapiapp_alb_security_group` output. Keep ALB name `dev-demo-api`,
   internal IPv4 scheme, HTTP listener, IP targets and `/ready` checks unchanged.
 
 The RDS CA bundle is committed public material. Passwords, filled Secret files,
@@ -87,7 +87,7 @@ Git keys, tokens, real `.tfvars`, plans and state stay outside Git.
 
 ```sh
 ./scripts/validate.sh
-./scripts/validate.sh --environment aws --ready
+./scripts/validate.sh --environment aws --no-placeholders
 git diff --check
 # After reviewing and publishing the deployment manifests to main:
 ./scripts/bootstrap.sh --environment aws --context "$EKS_CONTEXT"
@@ -95,7 +95,7 @@ git diff --check
 
 The bootstrap validates first, verifies CRDs/controllers/IngressClass and applies
 only the `bootstrap` registration. Bootstrap Synced confirms registration, not app health or
-migration success. App `myfastapiapp` remains **manually synced**. Perform a
+migration success. App `demo-api` remains **manually synced**. Perform a
 full sync with Force/Replace off so its migration hook runs; verify logs, Alembic
 revision, app readiness and database access using the app runbook.
 

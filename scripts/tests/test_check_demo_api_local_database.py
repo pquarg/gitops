@@ -5,7 +5,7 @@ import subprocess
 import sys
 import unittest
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'check-local-database.py'
+SCRIPT = Path(__file__).resolve().parents[1] / 'check-demo-api-local-database.py'
 spec = importlib.util.spec_from_file_location('check_local_database', SCRIPT)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -16,7 +16,7 @@ class LocalDatabaseCheckTests(unittest.TestCase):
         pod = {'restartPolicy': 'Always', 'imagePullSecrets': [{'name': 'registry-credentials'}],
                'containers': [{'name': 'api', 'image': 'test/app:release',
                                'readinessProbe': {'httpGet': {'path': '/ready'}},
-                               'env': [{'name': 'AUTH_DATABASE_URL', 'valueFrom': {'secretKeyRef': {'name': 'myfastapiapp-secrets', 'key': 'AUTH_DATABASE_URL'}}},
+                               'env': [{'name': 'AUTH_DATABASE_URL', 'valueFrom': {'secretKeyRef': {'name': 'demo-api-secrets', 'key': 'AUTH_DATABASE_URL'}}},
                                        {'name': 'APP_MESSAGE', 'valueFrom': {'configMapKeyRef': {'name': 'unused'}}}]}]}
         job = module.make_job(pod, 'check-example')
         result = job['spec']['template']['spec']

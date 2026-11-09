@@ -11,12 +11,12 @@ These credentials serve different purposes:
 | --- | --- | --- |
 | Argo CD Git credential | Read deployment manifests from GitHub | Argo CD repository settings |
 | GHCR classic PAT | Download the private app image | `registry-credentials` in the app namespace |
-| Compose app password | Connect the API and migrations to PostgreSQL | Private password file, then `AUTH_DATABASE_URL` in `myfastapiapp-secrets` |
+| Compose app password | Connect the API and migrations to PostgreSQL | Private password file, then `AUTH_DATABASE_URL` in `demo-api-secrets` |
 
 A successful Git connection in Argo CD does not configure either app Secret.
 
 Database credentials and connection settings belong to the app. Start with
-[myfastapiapp credentials](../../apps/myfastapiapp/overlays/local/README.md#provision-credentials).
+[demo-api credentials](../../apps/demo-api/overlays/local/README.md#provision-credentials).
 The shared Git credential used by Argo CD is configured during
 [deployment Git connection](setup.md#2-connect-the-deployment-git-repository).
 
@@ -28,7 +28,7 @@ The Deployment references a Kubernetes Secret with these settings:
 | --- | --- |
 | Cluster context | `kind-deployment` |
 | Secret name | `registry-credentials` |
-| Namespace | The same namespace as the app; `myfastapiapp` in the example below |
+| Namespace | The same namespace as the app; `demo-api` in the example below |
 | Secret type | `kubernetes.io/dockerconfigjson` |
 | Registry | `ghcr.io` |
 
@@ -53,19 +53,19 @@ an interactive terminal with Python 3 and kubectl available. For a PAT owned
 by `pquarg`:
 
 ```sh
-python3 scripts/configure-registry.py kind-deployment pquarg
+python3 scripts/configure-ghcr-credentials.py kind-deployment pquarg
 ```
 
 Replace `pquarg` with the account that owns your PAT if different. The helper
 prompts without echoing the PAT and submits the Secret directly to kubectl,
 keeping it out of command arguments, shell history and saved files. It defaults
-to namespace `myfastapiapp`; use `--namespace OTHER_APP` for another app.
+to namespace `demo-api`; use `--namespace OTHER_APP` for another app.
 Use the same command to update an existing `registry-credentials` Secret.
 
 To confirm the Secret exists without displaying its credentials:
 
 ```sh
-kubectl --context kind-deployment -n myfastapiapp get secret registry-credentials \
+kubectl --context kind-deployment -n demo-api get secret registry-credentials \
   -o 'custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type'
 ```
 

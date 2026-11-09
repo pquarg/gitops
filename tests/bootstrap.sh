@@ -35,8 +35,9 @@ case "$*" in
   *'get applicationset/aws-apps '*)
     if [[ "$CASE" == legacy-aws-set ]]; then echo applicationset.argoproj.io/aws-apps; fi ;;
   *'get applications -o jsonpath='*)
-    if [[ "$CASE" == legacy-local-app ]]; then echo staging-myfastapiapp:apps/myfastapiapp/overlays/local; fi
-    if [[ "$CASE" == legacy-aws-app ]]; then echo aws-myfastapiapp:apps/myfastapiapp/overlays/aws; fi
+    if [[ "$CASE" == legacy-local-app ]]; then echo staging-demo-api:apps/demo-api/overlays/local; fi
+    if [[ "$CASE" == legacy-aws-app ]]; then echo aws-demo-api:apps/demo-api/overlays/aws; fi
+    if [[ "$CASE" == previous-app ]]; then echo myfastapiapp:apps/myfastapiapp/overlays/local; fi
     if [[ "$CASE" == unprefixed-app ]]; then echo aws-billing:apps/aws-billing/overlays/aws; fi ;;
 esac
 # Fake read commands succeed even when no resource is found.
@@ -52,7 +53,7 @@ run() {
 for env in local aws; do
   context=selected; bootstrap_file=aws.yaml; platform=aws-load-balancer-controller
   if [[ "$env" == local ]]; then context=kind-selected; bootstrap_file=local.yaml; platform=traefik; fi
-  for scenario in success existing-bootstrap unprefixed-app validation controller class wrong-bootstrap bootstrap-without-path legacy-root legacy-local-set legacy-aws-set legacy-local-app legacy-aws-app legacy-query-error; do
+  for scenario in success existing-bootstrap unprefixed-app validation controller class wrong-bootstrap bootstrap-without-path legacy-root legacy-local-set legacy-aws-set legacy-local-app legacy-aws-app legacy-query-error previous-app; do
     run "$scenario" --environment "$env" --context "$context" --kubeconfig '/tmp/selected config'
     if [[ "$scenario" == success || "$scenario" == existing-bootstrap || "$scenario" == unprefixed-app ]]; then
       [[ "$result" == 0 ]] || fail "$env success"
@@ -62,7 +63,7 @@ for env in local aws; do
       grep -q "rollout.*deployment/$platform" "$tmp/log" || fail 'platform readiness missing'
       grep -q "validate --environment $env" "$tmp/log" || fail 'validation environment missing'
       if [[ "$env" == aws ]]; then
-        grep -q -- '--ready' "$tmp/log" || fail 'AWS placeholder check missing'
+        grep -q -- '--no-placeholders' "$tmp/log" || fail 'AWS placeholder check missing'
         if grep -q 'traefik\|get pvc' "$tmp/log"; then fail 'AWS must not inspect local storage'; fi
       elif grep -q 'aws-load-balancer-controller' "$tmp/log"; then fail 'local must not inspect AWS'; fi
       while IFS= read -r line; do
@@ -73,6 +74,9 @@ for env in local aws; do
       if grep -q '<apply>' "$tmp/log"; then fail 'failure must stop registration'; fi
       if [[ "$scenario" == legacy-* && "$scenario" != legacy-query-error ]]; then
         grep -q 'docs/registration-migration.md' "$tmp/out" || fail 'legacy migration guidance missing'
+      fi
+      if [[ "$scenario" == previous-app ]]; then
+        grep -q 'docs/app-rename.md' "$tmp/out" || fail 'app rename guidance missing'
       fi
       if [[ "$scenario" == class ]]; then
         infrastructure_target=local

@@ -27,7 +27,7 @@ selected in `infra/environments/aws/dev`; this repo expects their CRDs to be ins
   free IPv4 addresses. Keep database subnets isolated. Public subnets support
   the NAT gateway; the VPC also needs an internet gateway for CloudFront VPC origins.
 - Workers need access to GitHub, GHCR and other registries used by cluster
-  components. The current image remains `ghcr.io/pquarg/myfastapiapp:0.1.12`.
+  components. The current image remains `ghcr.io/pquarg/demo-api:0.1.13`.
   Match worker CPU architecture to the published image; do not assume a local
   Apple Silicon build works on an AMD64 worker.
 - Provide access from the operator's machine or CI to the EKS API. Script commands
@@ -49,7 +49,7 @@ selected in `infra/environments/aws/dev`; this repo expects their CRDs to be ins
   allows TCP 80 from AWS's CloudFront origin-facing prefix list and TCP 8000
   outbound to the worker group. Pass its ID to the Ingress. The controller manages
   backend ingress using `manage-backend-security-group-rules: "true"`.
-- The Ingress creates internal ALB `deployment-project-dev-app`, listening on
+- The Ingress creates internal ALB `dev-demo-api`, listening on
   private HTTP port 80, with no host-specific rule or ACM certificate. After it
   becomes Active with healthy targets, Terraform can look it up and provision a
   CloudFront VPC origin and standard distribution. Keep all VPC resources in the

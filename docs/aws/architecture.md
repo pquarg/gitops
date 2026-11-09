@@ -1,7 +1,7 @@
 # How this repository works
 
 `gitops` describes how to run containerised applications on an existing AWS
-Kubernetes platform. It currently deploys one FastAPI service, `myfastapiapp`,
+Kubernetes platform. It currently deploys one FastAPI service, `demo-api`,
 with a private PostgreSQL database and public HTTPS access through CloudFront.
 
 The deployment model is **GitOps**: Git holds the desired Kubernetes
@@ -16,7 +16,7 @@ Both infrastructure targets below belong to the same `infra` repository:
 
 | Repository or target directory | Responsibility | Produces or manages |
 | --- | --- | --- |
-| `myfastapiapp` | Application development | API code, Dockerfile, Alembic database migrations and release images published to GitHub Container Registry (GHCR) |
+| `demo-api` | Application development | API code, Dockerfile, Alembic database migrations and release images published to GitHub Container Registry (GHCR) |
 | `infra/environments/aws/dev` | AWS platform provisioning through Terraform | Network, EKS cluster and managed EC2 workers, private RDS PostgreSQL, security groups, Argo CD/controller installations, CloudFront and access-log storage |
 | **`gitops`** | Application deployment on that platform | Kubernetes manifests, Argo CD registrations, release image selection, credential helpers and operational guides |
 | `infra/environments/local` | Local platform provisioning | kind, shared Traefik, Argo CD and separate Compose PostgreSQL; local app manifests use this GitOps repository’s local overlay |
@@ -39,7 +39,7 @@ flowchart TD
     Registrations --> AppSet[apps ApplicationSet]
     Git --> AppSet
     AppSet --> Discovery[Discover apps/*/overlays/aws]
-    Discovery --> App[myfastapiapp Application]
+    Discovery --> App[demo-api Application]
     Git --> App
     App --> Render[Combine shared base and AWS overlay]
     Render --> Sync[Operator starts a full app sync]
@@ -55,8 +55,8 @@ The bootstrap Application automatically syncs registrations and corrects drift i
 [argocd/aws/apps.yaml](../../argocd/aws/apps.yaml) defines an **ApplicationSet**, a template
 that discovers each `apps/*/overlays/aws` directory on `main`. For each
 entry it extracts the app name from path segment 1 and generates an Argo CD
-Application named `<app>` targeting namespace `<app>`. Today this produces `myfastapiapp` in the Argo CD
-namespace, deploying workloads into namespace `myfastapiapp`.
+Application named `<app>` targeting namespace `<app>`. Today this produces `demo-api` in the Argo CD
+namespace, deploying workloads into namespace `demo-api`.
 
 Each generated Application points at its AWS overlay's **Kustomization**, which
 combines `../../base` with AWS configuration and supplies the release image tag. App syncs are manual in
@@ -70,11 +70,11 @@ explicit Kubernetes context. It does not provision the platform or start the
 app's manual sync. Argo CD reads the published `main` branch, so local edits must
 be pushed before they can be deployed.
 
-## What is deployed for myfastapiapp
+## What is deployed for demo-api
 
 The entry point is
-[apps/myfastapiapp/overlays/aws/kustomization.yaml](../../apps/myfastapiapp/overlays/aws/kustomization.yaml).
-It selects image `ghcr.io/pquarg/myfastapiapp:0.1.12` for both the API and its
+[apps/demo-api/overlays/aws/kustomization.yaml](../../apps/demo-api/overlays/aws/kustomization.yaml).
+It selects image `ghcr.io/pquarg/demo-api:0.1.13` for both the API and its
 migration Job.
 
 | Resource | Purpose |
@@ -87,7 +87,7 @@ migration Job.
 | Generated CA ConfigMap | Mounts the committed public RDS certificate bundle for verified database TLS; its content hash changes when the bundle changes |
 
 Credentials are provisioned separately. Both workloads read `AUTH_DATABASE_URL`
-from `myfastapiapp-secrets` and pull their image using `registry-credentials`.
+from `demo-api-secrets` and pull their image using `registry-credentials`.
 The filled Secrets are outside Kustomize and Git. The repository contains only
 an empty database Secret example and the public CA certificates.
 
@@ -164,16 +164,16 @@ created from the app's Ingress. The complete commands are in
 For a later release, publish a new image from the application repository, update
 `images[].newTag` in the app's Kustomization, validate and push, then perform a
 full manual sync and verify the result. One tag change updates both workloads.
-The [app runbook](../../apps/myfastapiapp/overlays/aws/README.md) covers releases and recovery.
+The [app runbook](../../apps/demo-api/overlays/aws/README.md) covers releases and recovery.
 
 ## Supporting scripts and checks
 
 | Entry point | Role |
 | --- | --- |
-| `scripts/validate.sh` | Checks Bash syntax and app naming, renders Kustomizations and validates Kubernetes/Argo CD schemas; `--ready` also rejects placeholders |
+| `scripts/validate.sh` | Checks Bash syntax and app naming, renders Kustomizations and validates Kubernetes/Argo CD schemas; `--no-placeholders` also rejects placeholders |
 | `scripts/validate-server.sh` | Optionally checks rendered resources against the cluster API with server dry-run; requires an app name and explicit context |
-| `scripts/bootstrap-database.py` | Initialises this project's restricted app database login and connection Secret using a temporary in-cluster PostgreSQL client; verifies TLS and permissions without running Alembic |
-| `scripts/configure-registry.py` | Prompts for a GHCR package-read token and applies the namespace's image-pull Secret |
+| `scripts/bootstrap-demo-api-rds.py` | Initialises this project's restricted app database login and connection Secret using a temporary in-cluster PostgreSQL client; verifies TLS and permissions without running Alembic |
+| `scripts/configure-ghcr-credentials.py` | Prompts for a GHCR package-read token and applies the namespace's image-pull Secret |
 | `scripts/image-pull-check.yaml` | Tests pulling the private app image without starting the API or running migrations |
 | `scripts/check-public-endpoint.py` | Checks public health, docs, redirects, headers and unauthenticated access; `--auth` also creates a synthetic account and tests login/logout/revocation |
 | `.github/workflows/validate.yaml` | Runs manifest validation on pushes, pull requests and manual dispatch using pinned validation tools |

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""User-run initialization of this project's private RDS application login.
+"""User-run initialization of demo-api's private AWS RDS application login.
 
 Requires Python 3, AWS CLI and kubectl. Passwords travel through subprocess stdin,
 never command arguments or local files. The administrator password is not stored
@@ -17,12 +17,14 @@ import sys
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 
-PROJECT_ID = "245361883993"
+AWS_ACCOUNT_ID = "245361883993"
 REGION = "eu-north-1"
 CLUSTER = "deployment-project-dev"
 DATABASE_ID = "deployment-project-dev-postgres"
-APP = "myfastapiapp"
-APP_SECRET = "myfastapiapp-secrets"
+APP = "demo-api"
+DATABASE_NAME = "myfastapiapp"
+DATABASE_USER = "myfastapiapp"
+APP_SECRET = "demo-api-secrets"
 
 BOOTSTRAP_SQL = r"""
 \getenv app_password APP_PASSWORD
@@ -87,10 +89,10 @@ def app_credentials(existing, host):
             password = unquote(parsed.password or "")
             valid = (
                 parsed.scheme == "postgresql"
-                and parsed.username == APP
+                and parsed.username == DATABASE_USER
                 and parsed.hostname == host
                 and parsed.port == 5432
-                and parsed.path == f"/{APP}"
+                and parsed.path == f"/{DATABASE_NAME}"
                 and parse_qs(parsed.query) == {"sslmode": ["verify-full"]}
                 and password
                 and "\n" not in password
@@ -106,7 +108,7 @@ def app_credentials(existing, host):
         return url, password
     password = secrets.token_urlsafe(32)
     url = (
-        f"postgresql://{APP}:{quote(password, safe='')}@{host}:5432/{APP}"
+        f"postgresql://{DATABASE_USER}:{quote(password, safe='')}@{host}:5432/{DATABASE_NAME}"
         "?sslmode=verify-full"
     )
     return url, password
@@ -135,7 +137,7 @@ def client_pod(name, host):
                     "capabilities": {"drop": ["ALL"]},
                 },
                 "env": [{"name": k, "value": v} for k, v in {
-                    "PGHOST": host, "PGPORT": "5432", "PGDATABASE": APP,
+                    "PGHOST": host, "PGPORT": "5432", "PGDATABASE": DATABASE_NAME,
                     "PGSSLMODE": "verify-full", "PGCONNECT_TIMEOUT": "15",
                     "PGSSLROOTCERT": "/etc/rds-ca/global-bundle.pem",
                 }.items()],
@@ -210,8 +212,8 @@ def main():
     temporary = []
     try:
         identity = commands.aws_json("sts", "get-caller-identity")
-        if identity["Account"] != PROJECT_ID:
-            raise RuntimeError("AWS profile targets a different project; stopping.")
+        if identity["Account"] != AWS_ACCOUNT_ID:
+            raise RuntimeError("AWS profile targets a different AWS account; stopping.")
         cluster = commands.aws_json("eks", "describe-cluster", "--name", CLUSTER)["cluster"]
         context = json.loads(commands.kube("config", "view", "--minify", "-o", "json"))
         if context["clusters"][0]["cluster"]["server"] != cluster["endpoint"]:
@@ -220,12 +222,12 @@ def main():
             "rds", "describe-db-instances", "--db-instance-identifier", DATABASE_ID
         )["DBInstances"][0]
         if (db["DBInstanceStatus"] != "available" or db["PubliclyAccessible"]
-                or db["DBName"] != APP or db["Endpoint"]["Port"] != 5432):
+                or db["DBName"] != DATABASE_NAME or db["Endpoint"]["Port"] != 5432):
             raise RuntimeError("Expected private, available application database; stopping.")
         host = db["Endpoint"]["Address"]
         ca = (Path(__file__).resolve().parents[1] / "apps" / APP / "overlays" / "aws" / "certs"
               / "global-bundle.pem").read_text()
-        print("Verified AWS project, EKS context and private RDS instance.", flush=True)
+        print("Verified AWS account, EKS context and private RDS instance.", flush=True)
 
         if not commands.kube("get", "namespace", APP, "--ignore-not-found", "-o", "name").strip():
             commands.create({"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": APP}})
@@ -233,6 +235,16 @@ def main():
             "-n", APP, "get", "secret", APP_SECRET, "--ignore-not-found", "-o", "json",
             sensitive=True,
         )
+        if not existing.strip():
+            previous = commands.kube(
+                "-n", "myfastapiapp", "get", "secret", "myfastapiapp-secrets",
+                "--ignore-not-found", "-o", "name",
+            )
+            if previous.strip():
+                raise RuntimeError(
+                    "Previous app connection Secret exists. Preserve its database "
+                    "password in demo-api-secrets before bootstrap; follow docs/app-rename.md."
+                )
         url, password = app_credentials(json.loads(existing) if existing.strip() else None, host)
         commands.redactions.extend([password, url])
         if not existing.strip():
@@ -252,7 +264,7 @@ def main():
         if (admin["username"] != db["MasterUsername"] or not admin_password
                 or "\n" in admin_password or "\r" in admin_password):
             raise RuntimeError("Unexpected administrator Secret format; stopping.")
-        name = "myfastapiapp-db-bootstrap-" + secrets.token_hex(4)
+        name = "demo-api-db-bootstrap-" + secrets.token_hex(4)
         temporary.append(("configmap", name))
         commands.create({
             "apiVersion": "v1", "kind": "ConfigMap",
@@ -268,7 +280,7 @@ def main():
         commands.execute_sql(name, admin["username"], admin_password,
                              "BEGIN;\n" + BOOTSTRAP_SQL + "\nCOMMIT;\n", password)
         print("Verifying the application password, TLS and migration permissions...", flush=True)
-        verification = commands.execute_sql(name, APP, password, VERIFY_SQL)
+        verification = commands.execute_sql(name, DATABASE_USER, password, VERIFY_SQL)
         success = [line for line in verification.splitlines() if line.startswith("BOOTSTRAP_OK ")]
         if len(success) != 1:
             raise RuntimeError("Application verification did not return its success marker.")

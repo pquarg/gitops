@@ -5,5 +5,5 @@ resources:
   - ingress.yaml
 images:
   # Sets the release image for both the API Deployment and migration Job.
-  - name: ghcr.io/pquarg/myfastapiapp
-    newTag: "0.1.12"
+  - name: ghcr.io/pquarg/demo-api
+    newTag: "0.1.13"

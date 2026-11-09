@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 usage() {
-  printf 'Usage: %s [--environment local|aws] [--ready]\n' "${0##*/}"
-  printf 'Validate both environments by default; --ready also rejects deployment placeholders.\n'
+  printf 'Usage: %s [--environment local|aws] [--no-placeholders]\n' "${0##*/}"
+  printf 'Validate both environments by default; --no-placeholders also rejects deployment placeholders.\n'
+  printf 'Legacy --ready is an alias for --no-placeholders; neither checks runtime readiness.\n'
 }
 environment=""
-ready=false
+no_placeholders=false
 while (( $# )); do
   case "$1" in
     --environment)
       if (( $# < 2 )); then usage >&2; exit 1; fi
       case "$2" in local|aws) environment="$2" ;; *) usage >&2; exit 1 ;; esac
       shift 2 ;;
-    --ready) ready=true; shift ;;
+    --no-placeholders|--ready) no_placeholders=true; shift ;;
     --help|-h) usage; exit 0 ;;
     *) usage >&2; exit 1 ;;
   esac
@@ -69,7 +70,7 @@ for selected in "${environments[@]}"; do
   kubectl kustomize "argocd/$selected" > "$render_dir/$selected-registrations.yaml"
   cp "bootstrap/$selected.yaml" "$render_dir/$selected-bootstrap.yaml"
 done
-if [[ "$ready" == true ]]; then
+if [[ "$no_placeholders" == true ]]; then
   python3 - "$render_dir" <<'PY'
 from pathlib import Path
 import re, sys

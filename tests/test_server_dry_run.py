@@ -31,7 +31,7 @@ with open(os.environ['CALL_LOG'], 'a') as output:
                 env = dict(os.environ, REAL_KUBECTL=shutil.which('kubectl'),
                            CALL_LOG=str(log), PATH=str(directory) + os.pathsep + os.environ['PATH'])
                 subprocess.run([
-                    str(ROOT / 'scripts/validate-server.sh'), 'myfastapiapp',
+                    str(ROOT / 'scripts/validate-server.sh'), 'demo-api',
                     '--environment', environment, '--context', context,
                     '--kubeconfig', '/tmp/selected config',
                 ], env=env, check=True, capture_output=True, text=True)
@@ -42,7 +42,7 @@ with open(os.environ['CALL_LOG'], 'a') as output:
                 for call in calls:
                     self.assertIn('--context=' + context, call['args'])
                     self.assertIn('--kubeconfig=/tmp/selected config', call['args'])
-                    self.assertIn('--namespace=myfastapiapp', call['args'])
+                    self.assertIn('--namespace=demo-api', call['args'])
                     self.assertIn('--dry-run=server', call['args'])
                 regular = calls[0]['resource']['items']
                 self.assertFalse(any('argocd.argoproj.io/hook' in item['metadata'].get('annotations', {}) for item in regular))
@@ -51,12 +51,12 @@ with open(os.environ['CALL_LOG'], 'a') as output:
                 self.assertEqual(len(hooks), 1)
                 self.assertEqual(hooks[0]['kind'], 'Job')
                 self.assertNotIn('name', hooks[0]['metadata'])
-                self.assertEqual(hooks[0]['metadata']['generateName'], 'myfastapiapp-migrate-preflight-')
+                self.assertEqual(hooks[0]['metadata']['generateName'], 'demo-api-migrate-preflight-')
 
     def test_rejects_environment_context_mismatch_before_kubernetes_calls(self):
         for environment, context in [('local', 'aws-selected'), ('aws', 'kind-selected')]:
             result = subprocess.run([
-                str(ROOT / 'scripts/validate-server.sh'), 'myfastapiapp',
+                str(ROOT / 'scripts/validate-server.sh'), 'demo-api',
                 '--environment', environment, '--context', context,
             ], capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)

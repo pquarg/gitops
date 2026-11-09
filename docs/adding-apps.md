@@ -29,13 +29,13 @@ repository, so Argo CD can render them without sibling checkouts or extra remote
 
 Keep Kubernetes names stable and selectors consistent. Shared settings include
 container ports, probes, Service, migration command and compatible security/resource
-settings. Keep environment differences in overlays; see myfastapiapp for an example
+settings. Keep environment differences in overlays; see demo-api for an example
 that preserves its existing AWS security settings in an AWS patch.
 
 Provision local deployment databases separately through `infra/environments/local`, outside
 kind. Keep connection Secrets and schema migration Jobs in GitOps. Each app must
 have its own database, restricted login and independent backup/recovery plan.
-Use [myfastapiapp's database setup](../../infra/environments/local/docs/database.md) as the current
+Use [demo-api's database setup](../../infra/environments/local/docs/database.md) as the current
 example.
 
 AWS databases and other cloud resources belong in `infra/environments/aws/dev`. The AWS overlay
@@ -48,7 +48,7 @@ and make its release image available: local app sync is automatic. AWS app sync
 remains manual. Filled Secret files are ignored and must not be in Kustomize.
 Keep release, backup, verification and recovery instructions beside each overlay.
 
-Run `./scripts/validate.sh --ready`, review both renders, commit and publish. For a
+Run `./scripts/validate.sh --no-placeholders`, review both renders, commit and publish. For a
 database release, use the app's full-sync procedure and migration/backup checks;
 selective sync skips hooks. Each environment may promote image versions separately.
 

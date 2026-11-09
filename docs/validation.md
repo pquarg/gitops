@@ -8,9 +8,9 @@ Run from this repository, or invoke the script by its absolute path:
 
 ```sh
 ./scripts/validate.sh
-./scripts/validate.sh --ready
+./scripts/validate.sh --no-placeholders
 ./scripts/validate.sh --environment local
-./scripts/validate.sh --environment aws --ready
+./scripts/validate.sh --environment aws --no-placeholders
 git diff --check
 ```
 
@@ -22,12 +22,14 @@ resource isolation, sync policies and matching API/migration images. `--environm
 selects the rendered resources for schema/placeholder checking; the shared safety
 regression checks still cover both environments.
 
-`--ready` rejects `REPLACE_...` values and reserved example domains in rendered
+`--no-placeholders` rejects `REPLACE_...` values and reserved example domains in rendered
 manifests. Empty Secret examples are deliberately excluded. Strict kubeconform
 validation fetches built-in schemas and Argo CD schemas from the configured CRD
 catalog; unknown kinds fail instead of being silently skipped. Internet access
 is required. No Docker, AWS credentials or Kubernetes API access is required.
-CI runs the same script with `--ready` on pushes and pull requests.
+CI runs the same script with `--no-placeholders` on pushes and pull requests.
+The old `--ready` spelling remains a compatibility alias; it performs the same
+configuration checks and never checks runtime readiness.
 
 ## Server dry-run
 
@@ -35,8 +37,8 @@ After provisioning the namespace and cluster CRDs, select the environment and
 context explicitly:
 
 ```sh
-./scripts/validate-server.sh myfastapiapp --environment local --context kind-deployment
-./scripts/validate-server.sh myfastapiapp --environment aws --context aws-deployment-project
+./scripts/validate-server.sh demo-api --environment local --context kind-deployment
+./scripts/validate-server.sh demo-api --environment aws --context aws-deployment-project
 ```
 
 `--kubeconfig /absolute/file` is also supported. The script dry-runs ordinary

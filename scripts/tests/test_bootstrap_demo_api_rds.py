@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 
 bootstrap = types.SimpleNamespace(**runpy.run_path(
-    str(Path(__file__).resolve().parents[1] / "bootstrap-database.py")
+    str(Path(__file__).resolve().parents[1] / "bootstrap-demo-api-rds.py")
 ))
 HOST = "test.eu-north-1.rds.amazonaws.com"
 ENDPOINT = "https://test.eks.amazonaws.com"
@@ -22,10 +22,11 @@ ADMIN_PASSWORD = "synthetic-admin-password"
 
 
 class FakeCommands:
-    def __init__(self, *, existing=None, fail_admin=False, wrong_context=False):
+    def __init__(self, *, existing=None, fail_admin=False, wrong_context=False, previous_secret=False):
         self.existing = existing
         self.fail_admin = fail_admin
         self.wrong_context = wrong_context
+        self.previous_secret = previous_secret
         self.calls = []
         self.created = []
 
@@ -34,7 +35,7 @@ class FakeCommands:
         output = ""
         if argv[0] == "aws":
             if "get-caller-identity" in argv:
-                output = json.dumps({"Account": bootstrap.PROJECT_ID})
+                output = json.dumps({"Account": bootstrap.AWS_ACCOUNT_ID})
             elif "describe-cluster" in argv:
                 output = json.dumps({"cluster": {"endpoint": ENDPOINT}})
             elif "describe-db-instances" in argv:
@@ -55,7 +56,10 @@ class FakeCommands:
                     "server": "https://wrong.example" if self.wrong_context else ENDPOINT,
                 }}]})
             elif "get" in argv and "secret" in argv:
-                output = json.dumps(self.existing) if self.existing else ""
+                if "myfastapiapp-secrets" in argv:
+                    output = "secret/myfastapiapp-secrets" if self.previous_secret else ""
+                else:
+                    output = json.dumps(self.existing) if self.existing else ""
             elif "create" in argv:
                 self.created.append(json.loads(kwargs["input"]))
             elif "exec" in argv:
@@ -73,7 +77,7 @@ class FakeCommands:
 class BootstrapTests(unittest.TestCase):
     def invoke(self, fake):
         output = io.StringIO()
-        with patch.object(sys, "argv", ["bootstrap-database.py", "aws-deployment-project"]), \
+        with patch.object(sys, "argv", ["bootstrap-demo-api-rds.py", "aws-deployment-project"]), \
                 patch("shutil.which", return_value="test-executable"), \
                 patch("subprocess.run", side_effect=fake.run), \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
@@ -97,10 +101,21 @@ class BootstrapTests(unittest.TestCase):
             self.assertNotIn(app_password, " ".join(argv))
         self.assertEqual([r["kind"] for r in fake.created].count("Secret"), 1)
         pod = next(r for r in fake.created if r["kind"] == "Pod")
+        self.assertEqual(pod["metadata"]["namespace"], "demo-api")
+        settings = {entry["name"]: entry["value"] for entry in pod["spec"]["containers"][0]["env"]}
+        self.assertEqual(settings["PGDATABASE"], "myfastapiapp")
         self.assertNotIn(ADMIN_PASSWORD, json.dumps(pod))
         self.assertNotIn(app_password, json.dumps(pod))
         self.assertFalse(pod["spec"]["automountServiceAccountToken"])
         self.assertEqual(len([a for a, _ in fake.calls if "delete" in a]), 2)
+
+    def test_rename_requires_existing_password_before_database_login_changes(self):
+        fake = FakeCommands(previous_secret=True)
+        status, output = self.invoke(fake)
+        self.assertEqual(status, 1)
+        self.assertIn("docs/app-rename.md", output)
+        self.assertFalse(any(r["kind"] == "Secret" for r in fake.created))
+        self.assertFalse(any("get-secret-value" in argv or "exec" in argv for argv, _ in fake.calls))
 
     def test_retry_reuses_existing_password_without_replacing_secret(self):
         url = f"postgresql://myfastapiapp:existing%2Bpassword@{HOST}:5432/myfastapiapp?sslmode=verify-full"

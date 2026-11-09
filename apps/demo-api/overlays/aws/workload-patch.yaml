@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: myfastapiapp-deployment
+  name: demo-api
 spec:
   template:
     spec:
@@ -14,7 +14,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: myfastapiapp-container
+        - name: api
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -31,12 +31,12 @@ spec:
       volumes:
         - name: rds-ca
           configMap:
-            name: myfastapiapp-rds-ca
+            name: demo-api-rds-ca
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: myfastapiapp-migrate
+  name: demo-api-migrate
 spec:
   template:
     spec:
@@ -72,4 +72,4 @@ spec:
       volumes:
         - name: rds-ca
           configMap:
-            name: myfastapiapp-rds-ca
+            name: demo-api-rds-ca

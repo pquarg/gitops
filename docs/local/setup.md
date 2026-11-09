@@ -1,5 +1,8 @@
 # Set up local app deployment
 
+For an existing `myfastapiapp` Application/namespace, complete the
+[app rename handoff](../app-rename.md) before publishing or registering `demo-api`.
+
 Run commands from `gitops` unless stated otherwise. The default cluster is
 `deployment`, context `kind-deployment`. App sync connects to a separately
 provisioned Compose database; it does not create PostgreSQL or mount storage.
@@ -58,26 +61,26 @@ Git remote is required: its platform configuration is applied from disk.
 Follow each app's README to provision its namespace, connection and registry
 Secrets and selected image before automatic sync. Run its Pod-to-database
 connectivity probe before registration.
-Start with [myfastapiapp](../../apps/myfastapiapp/overlays/local/README.md#provision-credentials).
+Start with [demo-api](../../apps/demo-api/overlays/local/README.md#provision-credentials).
 For more apps, follow [adding apps](../adding-apps.md) and
 [registry credentials](credentials.md#registry-authentication).
 
-For `myfastapiapp`, complete these checks in order before bootstrap:
+For `demo-api`, complete these checks in order before bootstrap:
 
-1. Create namespace `myfastapiapp` if it does not exist.
+1. Create namespace `demo-api` if it does not exist.
 2. Configure `registry-credentials` with the [interactive helper](credentials.md#registry-authentication)
    and a classic GitHub PAT with `read:packages`.
-3. Apply `myfastapiapp-secrets` using the existing Compose **app** password
+3. Apply `demo-api-secrets` using the existing Compose **app** password
    and `host.docker.internal:5433`, as shown in the app runbook.
 4. Make the selected image available and run
-   `./scripts/check-local-database.py --environment local --context kind-deployment`.
+   `./scripts/check-demo-api-local-database.py --environment local --context kind-deployment`.
    Continue only after it prints
    `Database connectivity, app privileges and transactional DDL passed.`
 
 A `secret/... created` message confirms storage of a Secret, not that its
 credentials work. A `job.batch/... created` message confirms submission of the
 probe, not a successful database connection. If it appears to hang, use
-[probe troubleshooting](../../apps/myfastapiapp/overlays/local/README.md#troubleshoot-the-first-sync).
+[probe troubleshooting](../../apps/demo-api/overlays/local/README.md#troubleshoot-the-first-sync).
 
 The same release image is used for the API and its migration Job. Build and
 publish it, or load that exact image into the local kind cluster. Database
@@ -105,13 +108,13 @@ kubectl --context kind-deployment -n argocd get applications
 The script validates first, checks the Argo CD controllers and shared ingress, then applies only
 `bootstrap`. The bootstrap Application manages the ApplicationSet in `argocd/local/kustomization.yaml`.
 It discovers every `apps/*/overlays/local` entry point and creates an independent Application,
-including `myfastapiapp` in namespace `myfastapiapp`. Each app runs
+including `demo-api` in namespace `demo-api`. Each app runs
 migrations against the existing database and rolls out the API. Traefik
 is managed separately by `infra/environments/local`.
 
 Bootstrap **Synced** means registration was applied; wait for the app's own
 **Synced / Healthy** status before testing. Follow its
-[verification procedure](../../apps/myfastapiapp/overlays/local/README.md#verify-the-deployment).
+[verification procedure](../../apps/demo-api/overlays/local/README.md#verify-the-deployment).
 The HTTP route is localhost port 80 → kind node port 30080 → shared Traefik →
 app Service. Docker Desktop and the cluster must remain running.
 

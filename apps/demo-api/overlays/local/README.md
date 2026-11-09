@@ -1,20 +1,24 @@
-# myfastapiapp local deployment
+# demo-api local deployment
+
+The desired namespace is `demo-api`, while the existing PostgreSQL database/login
+remain `myfastapiapp`. Existing installations need the
+[app rename handoff](../../../../docs/app-rename.md) before publication or sync.
 
 Run commands from `gitops`. Source, image builds and Alembic revisions live in
-the separate `../apps/myfastapiapp` repository; the deployment database is
+the separate `../apps/demo-api` repository; the deployment database is
 provisioned by `infra/environments/local`.
 
 | Setting | Value |
 | --- | --- |
 | Cluster context | `kind-deployment` |
-| Namespace | `myfastapiapp` |
-| Argo CD Application | `myfastapiapp` |
-| URL | http://myfastapiapp.localhost/api/v1/docs/ |
+| Namespace | `demo-api` |
+| Argo CD Application | `demo-api` |
+| URL | http://demo-api.localhost/api/v1/docs/ |
 | Database endpoint from Pods | `host.docker.internal:5433` (Docker Desktop) |
 
 The local and AWS overlays use the same API Deployment and migration Job. Both
 connect to an already provisioned external PostgreSQL database through
-`myfastapiapp-secrets`. Local uses a separate Compose container; AWS uses RDS.
+`demo-api-secrets`. Local uses a separate Compose container; AWS uses RDS.
 The local overlay contains app configuration and Traefik ingress, with no
 PostgreSQL workload or storage in the app sync.
 
@@ -40,7 +44,7 @@ follow the [database lifecycle guide](../../../../../infra/environments/local/do
 Return to `gitops`. Create the namespace if it does not already exist:
 
 ```sh
-kubectl --context kind-deployment create namespace myfastapiapp
+kubectl --context kind-deployment create namespace demo-api
 ```
 
 For private GHCR pulls, create a **classic** GitHub PAT with `read:packages` and
@@ -48,7 +52,7 @@ read access to the package. A useful name is `kind-deployment-ghcr-pull`.
 Run the helper and enter the PAT at its hidden prompt:
 
 ```sh
-python3 scripts/configure-registry.py kind-deployment pquarg
+python3 scripts/configure-ghcr-credentials.py kind-deployment pquarg
 ```
 
 Use the GitHub account that owns the PAT in place of `pquarg` if different.
@@ -62,13 +66,13 @@ The namespace needs both Secrets:
 
 | Ignored file or credential | Secret |
 | --- | --- |
-| `apps/myfastapiapp/overlays/local/app-secrets.yaml` | `myfastapiapp-secrets` with `AUTH_DATABASE_URL` |
+| `apps/demo-api/overlays/local/app-secrets.yaml` | `demo-api-secrets` with `AUTH_DATABASE_URL` |
 | GitHub package token, entered interactively | `registry-credentials` |
 
 ```sh
-cp -n apps/myfastapiapp/overlays/local/app-secrets.example.yaml apps/myfastapiapp/overlays/local/app-secrets.yaml
-chmod 600 apps/myfastapiapp/overlays/local/app-secrets.yaml
-git check-ignore apps/myfastapiapp/overlays/local/app-secrets.yaml
+cp -n apps/demo-api/overlays/local/app-secrets.example.yaml apps/demo-api/overlays/local/app-secrets.yaml
+chmod 600 apps/demo-api/overlays/local/app-secrets.yaml
+git check-ignore apps/demo-api/overlays/local/app-secrets.yaml
 ```
 
 Edit the ignored file and set `stringData.AUTH_DATABASE_URL` using the Compose
@@ -93,19 +97,19 @@ value is base64-encoded. Replace that entry with the example's `stringData`
 entry to edit the URL as plain text.
 
 ```sh
-kubectl --context kind-deployment -n myfastapiapp apply -f apps/myfastapiapp/overlays/local/app-secrets.yaml
+kubectl --context kind-deployment -n demo-api apply -f apps/demo-api/overlays/local/app-secrets.yaml
 ```
 
 Confirm that both Secret names and types are present without displaying their
 contents:
 
 ```sh
-kubectl --context kind-deployment -n myfastapiapp get secrets \
+kubectl --context kind-deployment -n demo-api get secrets \
   -o 'custom-columns=NAME:.metadata.name,TYPE:.type'
 ```
 
 Expect `registry-credentials` of type `kubernetes.io/dockerconfigjson` and
-`myfastapiapp-secrets` of type `Opaque`. This checks their presence, not whether
+`demo-api-secrets` of type `Opaque`. This checks their presence, not whether
 the credentials work. Filled Secret files stay outside Git and Kustomize.
 
 ### 4. Check image access and database connectivity
@@ -114,7 +118,7 @@ the credentials work. Filled Secret files stay outside Git and Kustomize.
 the actual Pod-to-database path before registering or syncing the app:
 
 ```sh
-./scripts/check-local-database.py --environment local --context kind-deployment
+./scripts/check-demo-api-local-database.py --environment local --context kind-deployment
 ```
 
 This temporary Job uses the selected app image and connection Secret, verifies
@@ -139,8 +143,8 @@ Apply edited connection Secrets with the command above. Environment variables do
 not refresh in running Pods. Restart the API through Argo CD or explicitly:
 
 ```sh
-kubectl --context kind-deployment -n myfastapiapp rollout restart deployment/myfastapiapp-deployment
-kubectl --context kind-deployment -n myfastapiapp rollout status deployment/myfastapiapp-deployment --timeout=180s
+kubectl --context kind-deployment -n demo-api rollout restart deployment/demo-api
+kubectl --context kind-deployment -n demo-api rollout status deployment/demo-api --timeout=180s
 ```
 
 Changing a password file or Kubernetes Secret does not rotate an existing database
@@ -149,10 +153,10 @@ then run the connectivity probe and verify readiness/login.
 
 ## Make the app image available
 
-The selected image tag in `apps/myfastapiapp/overlays/local/kustomization.yaml` applies to both
+The selected image tag in `apps/demo-api/overlays/local/kustomization.yaml` applies to both
 the API and migration Job. Publish the image from the separate app repository
 before deploying that tag. When updating its project version, refresh and commit
-its lockfile with `uv lock --project ../apps/myfastapiapp`; the image build uses
+its lockfile with `uv lock --project ../apps/demo-api`; the image build uses
 `uv sync --locked`.
 
 Confirm its image publishing job succeeded. If a failed release skipped publication:
@@ -165,9 +169,9 @@ gh run list --repo pquarg/myfastapiapp --workflow ci.yaml --limit 3
 For a local build instead, load the exact selected image into kind:
 
 ```sh
-APP_IMAGE="$(kubectl kustomize apps/myfastapiapp/overlays/local |
-  awk '$1 == "image:" && $2 ~ /myfastapiapp:/ { image = $2 } END { print image }')"
-docker build --provenance=false -t "$APP_IMAGE" ../apps/myfastapiapp
+APP_IMAGE="$(kubectl kustomize apps/demo-api/overlays/local |
+  awk '$1 == "image:" && $2 ~ /demo-api:/ { image = $2 } END { print image }')"
+docker build --provenance=false -t "$APP_IMAGE" ../apps/demo-api
 kind load docker-image "$APP_IMAGE" --name deployment
 ```
 
@@ -181,19 +185,19 @@ After [bootstrap](../../../../docs/local/setup.md#4-validate-publish-and-registe
 wait for app sync and migration completion. Then:
 
 ```sh
-kubectl --context kind-deployment -n myfastapiapp logs job/myfastapiapp-migrate
-kubectl --context kind-deployment -n myfastapiapp rollout status deployment/myfastapiapp-deployment --timeout=300s
-kubectl --context kind-deployment -n myfastapiapp exec deployment/myfastapiapp-deployment -- python -m alembic current --check-heads
-curl -fsS http://myfastapiapp.localhost/health
-curl -fsS http://myfastapiapp.localhost/ready
+kubectl --context kind-deployment -n demo-api logs job/demo-api-migrate
+kubectl --context kind-deployment -n demo-api rollout status deployment/demo-api --timeout=300s
+kubectl --context kind-deployment -n demo-api exec deployment/demo-api -- python -m alembic current --check-heads
+curl -fsS http://demo-api.localhost/health
+curl -fsS http://demo-api.localhost/ready
 ```
 
 `/health` checks the API process; `/ready` checks database connectivity. Confirm
-Argo CD reports **Synced / Healthy** for `myfastapiapp` and the intended
+Argo CD reports **Synced / Healthy** for `demo-api` and the intended
 revision. Both HTTP checks should return `{"status":"ok"}`. Bootstrap **Synced**
 alone does not establish app health: migration wave `0` must succeed before
 the API in wave `1` rolls out.
-Test new registration and login in the [API docs](http://myfastapiapp.localhost/api/v1/docs/),
+Test new registration and login in the [API docs](http://demo-api.localhost/api/v1/docs/),
 plus existing login and records after updates. These are the final functional
 checks after the deployment checks above pass.
 Docker Desktop, the separate database and kind must all remain running.
@@ -203,7 +207,7 @@ The route is localhost port 80 → kind node port 30080 → shared Traefik → a
 Service → FastAPI. For a direct diagnostic connection:
 
 ```sh
-kubectl --context kind-deployment -n myfastapiapp port-forward service/myfastapiapp-service 18000:80
+kubectl --context kind-deployment -n demo-api port-forward service/demo-api 18000:80
 ```
 
 Open http://localhost:18000/api/v1/docs/. Inspect migration logs and Pod events
@@ -214,39 +218,39 @@ if rollout fails.
 Start with the current Pods, Jobs and recent events:
 
 ```sh
-kubectl --context kind-deployment -n myfastapiapp get pods,jobs
-kubectl --context kind-deployment -n myfastapiapp get events --sort-by=.lastTimestamp
+kubectl --context kind-deployment -n demo-api get pods,jobs
+kubectl --context kind-deployment -n demo-api get events --sort-by=.lastTimestamp
 ```
 
 Events retain earlier errors; match them to the current Pod and its timestamp.
 
 | Symptom | Check and correction |
 | --- | --- |
-| GHCR `401 Unauthorized`, `ImagePullBackOff` or `FailedToRetrieveImagePullSecret` | Check `registry-credentials` exists in `myfastapiapp`. Rerun the [registry helper](../../../../docs/local/credentials.md#registry-authentication) with a valid classic PAT with `read:packages` and package access. |
-| `CreateContainerConfigError` with `secret "myfastapiapp-secrets" not found` | Apply the filled connection Secret from [credential setup](#3-configure-the-database-connection-secret). |
+| GHCR `401 Unauthorized`, `ImagePullBackOff` or `FailedToRetrieveImagePullSecret` | Check `registry-credentials` exists in `demo-api`. Rerun the [registry helper](../../../../docs/local/credentials.md#registry-authentication) with a valid classic PAT with `read:packages` and package access. |
+| `CreateContainerConfigError` with `secret "demo-api-secrets" not found` | Apply the filled connection Secret from [credential setup](#3-configure-the-database-connection-secret). |
 | `failed to resolve host 'myfastapiapp-postgres-service'` | The connection still uses the old in-cluster address. Update the ignored Secret file to `host.docker.internal:5433`, use the current Compose app password and apply it again. |
 | Connection refused or timed out | Check Docker Desktop, PostgreSQL health, the configured host port and the Pod-to-host route. See [database setup](../../../../../infra/environments/local/docs/database.md#first-setup). |
-| Password authentication failed | Use the existing Compose app password for `myfastapiapp`. Replacing a password file does not rotate an initialized database; follow [credential rotation](../../../../../infra/environments/local/docs/database.md#lifecycle-and-credentials). |
+| Password authentication failed | Use the existing Compose password for the `myfastapiapp` database login. Replacing a password file does not rotate an initialized database; follow [credential rotation](../../../../../infra/environments/local/docs/database.md#lifecycle-and-credentials). |
 | Database probe appears to hang after `job.batch/... created` | Inspect the Job status and logs below. The helper waits up to 120 seconds for success even if the Job has failed. |
 
 For a waiting database probe, copy its `local-db-check-...` name from the
 helper output. In a second terminal, replace `JOB_NAME` with that name:
 
 ```sh
-kubectl --context kind-deployment -n myfastapiapp get job JOB_NAME
-kubectl --context kind-deployment -n myfastapiapp logs job/JOB_NAME
+kubectl --context kind-deployment -n demo-api get job JOB_NAME
+kubectl --context kind-deployment -n demo-api logs job/JOB_NAME
 ```
 
 The helper deletes its temporary Job when it exits, so inspect it while the
 helper is waiting. The migration Job is retained for inspection:
 
 ```sh
-kubectl --context kind-deployment -n myfastapiapp logs job/myfastapiapp-migrate
+kubectl --context kind-deployment -n demo-api logs job/demo-api-migrate
 ```
 
 After correcting the cause, rerun the database probe. If it passes, allow a
 pending automatic sync retry to run. If the earlier sync has exhausted its
-retries, sync the **entire** `myfastapiapp` Application in Argo CD with
+retries, sync the **entire** `demo-api` Application in Argo CD with
 Prune, Force and Replace off. Selective sync skips migration hooks. Run the
 [deployment verification](#verify-the-deployment) afterward. Applying an
 ignored Secret needs no commit or push; manifest changes must be published.
@@ -256,7 +260,7 @@ ignored Secret needs no commit or push; manifest changes must be published.
 1. Build and publish a new image from the app repository, or build and load it
    into `deployment` for local use. Keep the app version and lockfile in sync.
 2. Update `images[].newTag` in
-   `apps/myfastapiapp/overlays/local/kustomization.yaml`. This selects the same
+   `apps/demo-api/overlays/local/kustomization.yaml`. This selects the same
    release for the API and migration Job. This is the only deployment image
    version to edit for local; AWS has its own overlay image selection. The shared
    workload manifests contain no release tags.
@@ -273,7 +277,7 @@ if a failed release skipped image publication.
 
 ## Back up and release a database change
 
-1. Disable auto-sync on `myfastapiapp` in Argo CD and wait for active
+1. Disable auto-sync on `demo-api` in Argo CD and wait for active
    syncs/migration Jobs to finish. The ApplicationSet preserves this live pause.
 2. Follow [backup and restore verification](../../../../../infra/environments/local/docs/database.md#backup-and-restore).
    Run the Compose backup helper from `infra/environments/local`. Keep writers paused when
@@ -281,9 +285,9 @@ if a failed release skipped image publication.
 3. Validate and review before publishing:
 
    ```sh
-   ./scripts/validate.sh --ready
-   ./scripts/validate-server.sh myfastapiapp --environment local --context kind-deployment
-   ./scripts/check-local-database.py --environment local --context kind-deployment
+   ./scripts/validate.sh --no-placeholders
+   ./scripts/validate-server.sh demo-api --environment local --context kind-deployment
+   ./scripts/check-demo-api-local-database.py --environment local --context kind-deployment
    git diff --check
    ```
 

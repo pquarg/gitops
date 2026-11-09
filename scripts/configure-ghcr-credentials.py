@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("context", help="Explicit Kubernetes context")
     parser.add_argument("username", help="GitHub account that owns the classic PAT")
-    parser.add_argument("--namespace", default="myfastapiapp")
+    parser.add_argument("--namespace", default="demo-api")
     args = parser.parse_args()
     try:
         # Fail rather than fall back to an echoed prompt without a usable TTY.

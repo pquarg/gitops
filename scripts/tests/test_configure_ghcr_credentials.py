@@ -13,13 +13,13 @@ import unittest
 from unittest.mock import patch
 
 
-main = runpy.run_path(str(Path(__file__).resolve().parents[1] / "configure-registry.py"))["main"]
+main = runpy.run_path(str(Path(__file__).resolve().parents[1] / "configure-ghcr-credentials.py"))["main"]
 
 
 class RegistryTests(unittest.TestCase):
     def invoke(self, result, *, password="synthetic-token", prompt_error=None):
         output = io.StringIO()
-        with patch.object(sys, "argv", ["configure-registry.py", "aws-deployment-project", "pquarg"]), \
+        with patch.object(sys, "argv", ["configure-ghcr-credentials.py", "aws-deployment-project", "pquarg"]), \
                 patch("getpass.getpass", return_value=password, side_effect=prompt_error), \
                 patch("subprocess.run", return_value=result) as run, \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):

@@ -1,5 +1,9 @@
 # GitOps application deployments
 
+Existing `myfastapiapp` deployments need the [app rename handoff](docs/app-rename.md)
+**before publishing** this checkout. The new app is `demo-api`; its existing
+database names, login and storage identities remain `myfastapiapp`.
+
 One repository deploys the same applications to local kind and AWS EKS.
 Kustomize combines a shared app base with an environment overlay. Each cluster's
 Argo CD reads only its own registrations and overlays from this Git repository.
@@ -7,7 +11,7 @@ Application source and image builds remain in `../apps/`; platform provisioning
 remains in the independent `../infra` repository.
 
 ```text
-apps/myfastapiapp/
+apps/demo-api/
   base/                         # Shared Deployment, Service, ConfigMap and migration Job
   overlays/local/               # Local release, configuration and Traefik
   overlays/aws/                 # AWS release, configuration, ALB and verified RDS TLS
@@ -44,7 +48,7 @@ For local setup, finish the [app prerequisites](docs/local/setup.md#3-prepare-th
 before registration: healthy Compose PostgreSQL, both app Secrets and a passing
 Pod database probe. Argo CD's Git credential does not authenticate GHCR image
 pulls. Use the
-[first-sync troubleshooting](apps/myfastapiapp/overlays/local/README.md#troubleshoot-the-first-sync)
+[first-sync troubleshooting](apps/demo-api/overlays/local/README.md#troubleshoot-the-first-sync)
 if a migration or image pull is blocked.
 
 On a prepared cluster, register only the chosen environment:
@@ -66,16 +70,16 @@ using the base receives its next published changes according to its sync policy.
 A shared base change can therefore affect AWS as well as local; review both renders.
 
 The selected release is in each overlay's `kustomization.yaml`. Both environments
-initially select `0.1.12`. Test a new image locally, then promote the same image tag
+initially select `0.1.13`. Test a new image locally, then promote the same image tag
 (or preferably immutable digest) to the AWS overlay without rebuilding it. API
 and migration Job use the same selected image within each environment. Database
 contents and credentials remain independent; switching an image does not reverse
 a schema migration. Follow the environment's app release and backup runbook.
 
 ```sh
-kubectl kustomize apps/myfastapiapp/overlays/local
-kubectl kustomize apps/myfastapiapp/overlays/aws
-./scripts/validate.sh --ready
+kubectl kustomize apps/demo-api/overlays/local
+kubectl kustomize apps/demo-api/overlays/aws
+./scripts/validate.sh --no-placeholders
 git diff --check
 ```
 
@@ -86,8 +90,8 @@ access, but no running cluster or AWS credentials. Use `--environment local` or
 [validation](docs/validation.md) for limits and explicit-context server dry-runs.
 
 - [Add an app](docs/adding-apps.md)
-- [Local app releases, database backups and recovery](apps/myfastapiapp/overlays/local/README.md)
-- [AWS app releases, RDS and recovery](apps/myfastapiapp/overlays/aws/README.md)
+- [Local app releases, database backups and recovery](apps/demo-api/overlays/local/README.md)
+- [AWS app releases, RDS and recovery](apps/demo-api/overlays/aws/README.md)
 - [Local platform](../infra/environments/local/README.md)
 - [AWS platform](../infra/environments/aws/dev/README.md)
 

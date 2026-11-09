@@ -36,4 +36,4 @@ jobs:
           echo "$tool_dir" >> "$GITHUB_PATH"
 
       - name: Validate all app deployments and registrations
-        run: ./scripts/validate.sh --ready
+        run: ./scripts/validate.sh --no-placeholders

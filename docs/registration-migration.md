@@ -1,5 +1,13 @@
 # Migrate Argo CD registration names
 
+This is the earlier registration-only handoff for `myfastapiapp`, before the
+app/namespace rename. Its resource names are intentionally historical. Run it
+only against a reviewed pre-app-rename GitOps revision; publishing the current
+checkout also changes app paths and cannot use adoption alone. For a cluster
+already using `bootstrap` / `apps` / `myfastapiapp`, follow
+[the app rename](app-rename.md) instead. A cluster still using prefixed names
+needs a separately reviewed combined handoff or this earlier handoff first.
+
 Both clusters now use the same registration chain in namespace `argocd`:
 
 | Resource | Previous local name | Previous AWS name | New name |
@@ -51,7 +59,7 @@ Select one kubeconfig file if yours differs. Inventory **all** Applications;
 add every generated old app name to `OLD_APPS` before continuing.
 
 ```sh
-./scripts/validate.sh --ready
+./scripts/validate.sh --no-placeholders
 git diff --check
 "${kube[@]}" -n argocd get applications,applicationsets -o wide
 "${kube[@]}" -n argocd get application root "${OLD_APPS[@]}" -o yaml
@@ -150,8 +158,8 @@ does not establish successful adoption. Renaming an Application changes its
 [resource tracking identity](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_tracking/);
 a full sync records the new owner on the retained resources.
 
-Follow the selected app's [local verification](../apps/myfastapiapp/overlays/local/README.md#verify-the-deployment)
-or [AWS verification](../apps/myfastapiapp/overlays/aws/README.md#first-deployment),
+Follow the selected app's [local verification](../apps/demo-api/overlays/local/README.md#verify-the-deployment)
+or [AWS verification](../apps/demo-api/overlays/aws/README.md#first-deployment),
 including database readiness and existing-record/login checks. Do not claim the
 migration is complete from `bootstrap` **Synced** alone.
 

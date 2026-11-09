@@ -42,7 +42,7 @@ if [[ "$kubeconfig" == *:* ]]; then
 fi
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 validation_args=(--environment "$environment")
-if [[ "$environment" == aws ]]; then validation_args+=(--ready); fi
+if [[ "$environment" == aws ]]; then validation_args+=(--no-placeholders); fi
 "$project_root/scripts/validate.sh" "${validation_args[@]}"
 kube=(kubectl "--kubeconfig=$kubeconfig" "--context=$context")
 "${kube[@]}" get nodes > /dev/null
@@ -59,6 +59,10 @@ for legacy in application/root applicationset/staging-apps applicationset/aws-ap
 done
 registrations="$("${kube[@]}" -n argocd get applications -o jsonpath='{range .items[*]}{.metadata.name}{":"}{.spec.source.path}{"\n"}{end}')"
 while IFS=: read -r name path; do
+  if [[ "$name" == myfastapiapp || "$path" == apps/myfastapiapp/overlays/* ]]; then
+    printf 'Error: previous app registration %s exists; follow docs/app-rename.md first.\n' "$name" >&2
+    exit 1
+  fi
   for prefix in staging aws; do
     if [[ "$name" == "$prefix-"* && "$path" == "apps/${name#"$prefix-"}/overlays/"* ]]; then
       printf 'Error: legacy Application %s exists; follow docs/registration-migration.md first.\n' "$name" >&2

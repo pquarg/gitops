@@ -47,7 +47,7 @@ def make_job(pod_spec, name):
         container.pop(key, None)
     return {
         'apiVersion': 'batch/v1', 'kind': 'Job',
-        'metadata': {'name': name, 'namespace': 'myfastapiapp'},
+        'metadata': {'name': name, 'namespace': 'demo-api'},
         'spec': {'backoffLimit': 0, 'activeDeadlineSeconds': 90,
                  'template': {'spec': spec}},
     }
@@ -66,7 +66,7 @@ def main():
     # Local rendering never contacts the API server or reads filled Secret files.
     rendered = subprocess.check_output([
         'kubectl', 'patch', '--local', '-k',
-        str(ROOT / 'apps/myfastapiapp/overlays/local'),
+        str(ROOT / 'apps/demo-api/overlays/local'),
         '--type=merge', '-p', '{}', '-o', 'json'], text=True)
     decoder = json.JSONDecoder()
     resources = []
@@ -75,11 +75,11 @@ def main():
         resource, end = decoder.raw_decode(rendered)
         resources.extend(resource['items'] if resource['kind'] == 'List' else [resource])
         rendered = rendered[end:].lstrip()
-    deployment = next(r for r in resources if r['kind'] == 'Deployment' and r['metadata']['name'] == 'myfastapiapp-deployment')
+    deployment = next(r for r in resources if r['kind'] == 'Deployment' and r['metadata']['name'] == 'demo-api')
     name = 'local-db-check-' + uuid.uuid4().hex[:12]
     job = make_job(deployment['spec']['template']['spec'], name)
     kube = ['kubectl', '--kubeconfig', args.kubeconfig, '--context', args.context,
-            '--namespace', 'myfastapiapp', '--request-timeout=30s']
+            '--namespace', 'demo-api', '--request-timeout=30s']
     subprocess.run(kube + ['create', '-f', '-'], input=json.dumps(job), text=True, check=True)
     try:
         result = subprocess.run(kube + ['wait', '--for=condition=complete', 'job/' + name, '--timeout=120s'])
