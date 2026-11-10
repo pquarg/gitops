@@ -6,4 +6,4 @@ resources:
 images:
   # Sets the release image for both the API Deployment and migration Job.
   - name: ghcr.io/pquarg/demo-api
-    newTag: "0.1.13"
+    newTag: "0.1.14"
