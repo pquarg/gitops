@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          env:
+            # Cluster DNS reaches the local test inbox without host port routing.
+            - name: AUTH_SMTP_HOST
+              value: demo-api-mailpit
+            - name: AUTH_SMTP_PORT
+              value: "1025"
+            - name: AUTH_SMTP_SECURITY
+              value: none

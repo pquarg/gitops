@@ -13,6 +13,8 @@ provisioned by `infra/environments/local`.
 | Namespace | `demo-api` |
 | Argo CD Application | `demo-api` |
 | URL | http://demo-api.localhost/api/v1/docs/ |
+| Captured email inbox | http://mailpit.localhost |
+| SMTP endpoint from API Pods | `demo-api-mailpit:1025`, without TLS/authentication |
 | Database endpoint from Pods | `host.docker.internal:5433` (Docker Desktop) |
 
 The local and AWS overlays use the same API Deployment and migration Job. Both
@@ -20,6 +22,61 @@ connect to an already provisioned external PostgreSQL database through
 `demo-api-secrets`. Local uses a separate Compose container; AWS uses RDS.
 The local overlay contains app configuration and Traefik ingress, with no
 PostgreSQL workload or storage in the app sync.
+
+The local overlay also deploys a pinned Mailpit test inbox in namespace
+`demo-api`. The API sends password reset emails to it through cluster DNS;
+Mailpit captures them and has no external SMTP relay. These resources and SMTP
+settings exist only in this overlay. AWS configuration stays independent.
+
+## Try password recovery with Mailpit
+
+Publish this GitOps overlay and sync the entire `demo-api` Application. No app
+image rebuild or new database migration is needed when the password reset app
+release and its migration are already deployed. Mailpit starts in wave `0`,
+before the API's wave `1` rollout. The existing migration hook also runs and
+Alembic skips already applied revisions. Keep Prune, Force and Replace off.
+
+Verify both Deployments and the inbox:
+
+```sh
+kubectl --context kind-deployment -n demo-api rollout status deployment/demo-api-mailpit --timeout=300s
+kubectl --context kind-deployment -n demo-api rollout status deployment/demo-api --timeout=300s
+curl -fsS http://mailpit.localhost/ > /dev/null
+```
+
+1. Open http://demo-api.localhost/api/v1/docs/ and register a test account, or
+   use an account that already has a stored email address.
+2. Submit that email to `POST /api/v1/auth/forgot-password`. It returns `202`.
+3. Open http://mailpit.localhost and copy the token from the captured message.
+4. Submit the token and a 12–128 character `new_password` to
+   `POST /api/v1/auth/reset-password`. Success is `204`. Sign in again with the
+   new password; previous sessions for that account are revoked.
+
+An unregistered address receives the same `202` response but no email. Repeated
+requests for an account are limited to one email per 60 seconds by default.
+Tokens expire after 15 minutes and work once. If no email arrives, inspect API
+logs for `Password reset request could not be completed` and Mailpit Pod status.
+A `202` acknowledges the request, not delivery. `503` means the API did not load
+SMTP settings; confirm the selected Git revision and completed API rollout.
+
+The inbox is unauthenticated and contains reset credentials, so use test
+accounts. Its web route uses the existing local Traefik ingress and kind's
+loopback host binding. SMTP has only a ClusterIP Service, without a host port or
+public ingress. There is no persistent volume: captured mail is discarded when
+the Pod is replaced. Storage is limited to 128 MiB and the oldest messages are
+periodically removed above 100 messages. PostgreSQL data is independent.
+The app repository's optional Compose Mailpit on `localhost:8025` is a separate
+inbox for running FastAPI on the laptop; it is not used by this deployment.
+
+To switch to real delivery later, change `smtp-patch.yaml` to your provider's
+host, port and TLS mode, add its approved `AUTH_SMTP_SENDER`, and reference SMTP
+credentials from an ignored Kubernetes Secret using explicit `secretKeyRef`
+environment entries. Keep the existing database Secret and its credentials.
+Validate, publish and sync the change so the API Pods restart. No app rebuild
+or migration is needed. Mailpit can stay as an unused test inbox; removing its
+resources requires reviewing their deletion separately. See the app's
+[SMTP settings](https://github.com/pquarg/myfastapiapp/blob/main/docs/password-reset.md#settings)
+and [Mailpit documentation](https://mailpit.axllent.org/docs/configuration/smtp/).
 
 ## Provision credentials
 

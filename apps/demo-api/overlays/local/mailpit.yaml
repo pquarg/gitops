@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-api-mailpit
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  replicas: 1
+  # Keep one inbox; captured messages are disposable on Pod replacement.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: demo-api-mailpit
+  template:
+    metadata:
+      labels:
+        app: demo-api-mailpit
+    spec:
+      containers:
+        - name: mailpit
+          # Match the app repository's pinned development inbox image.
+          image: axllent/mailpit:v1.27.4
+          ports:
+            - name: smtp
+              containerPort: 1025
+            - name: http
+              containerPort: 8025
+          env:
+            - name: MP_DATABASE
+              value: /data/mailpit.db
+            - name: MP_MAX_MESSAGES
+              value: "100"
+            - name: MP_DISABLE_VERSION_CHECK
+              value: "true"
+            - name: MP_SMTP_DISABLE_RDNS
+              value: "true"
+            - name: MP_QUIET
+              value: "true"
+          volumeMounts:
+            - name: inbox
+              mountPath: /data
+          readinessProbe:
+            tcpSocket:
+              port: smtp
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+      volumes:
+        - name: inbox
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-api-mailpit
+spec:
+  type: ClusterIP
+  selector:
+    app: demo-api-mailpit
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: smtp
+    - name: http
+      port: 8025
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-api-mailpit
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: mailpit.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-api-mailpit
+                port:
+                  name: http

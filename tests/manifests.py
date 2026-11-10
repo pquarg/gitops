@@ -36,9 +36,11 @@ for env in ('local', 'aws'):
         assert ('Service', 'myfastapiapp-postgres-service') not in resources
         assert not any('rds-ca' in name for kind, name in resources)
     else:
+        assert not any('mailpit' in name for kind, name in resources), 'AWS must not deploy the local email inbox'
         assert not any(kind in ('PersistentVolume', 'PersistentVolumeClaim', 'StatefulSet') for kind, name in resources), 'AWS must not deploy local database/storage'
         pod = deployment['spec']['template']['spec']
         settings = {v['name']: v.get('value') for v in pod['containers'][0]['env']}
+        assert settings.get('AUTH_SMTP_HOST') != 'demo-api-mailpit', 'AWS must not send mail to the local test inbox'
         assert settings['PGSSLMODE'] == 'verify-full'
         assert pod['securityContext']['runAsNonRoot'] is True
     registrations = render(f'argocd/{env}')
