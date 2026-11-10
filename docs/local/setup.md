@@ -1,19 +1,12 @@
 # Set up local app deployment
 
-For an existing `myfastapiapp` Application/namespace, complete the
-[app rename handoff](../app-rename.md) before publishing or registering `demo-api`.
-
 Run commands from `gitops` unless stated otherwise. The default cluster is
 `deployment`, context `kind-deployment`. App sync connects to a separately
 provisioned Compose database; it does not create PostgreSQL or mount storage.
 
-For an existing `root` / prefixed-app installation, follow the
-[registration migration](../registration-migration.md) before publishing the new
-names or running bootstrap.
-
 ## 1. Prepare the platform with infra/environments/local
 
-Follow [infra/environments/local's README](../../../infra/environments/local/README.md) to provision separate
+Follow [infra/environments/local's README](https://github.com/pquarg/infra/blob/main/environments/local/README.md) to provision separate
 Compose PostgreSQL, configure the kind localhost port mapping, create the cluster, install Argo CD
 and install shared Traefik through Terraform Helm. Complete its database first
 setup and create the ignored kind configuration before running its platform
@@ -30,7 +23,7 @@ cd ../../../gitops
 ```
 
 Expect PostgreSQL to be healthy before continuing. If `database/.env` or its
-password files are missing, follow [database first setup](../../../infra/environments/local/docs/database.md#first-setup).
+password files are missing, follow [database first setup](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#first-setup).
 Installing Argo CD does not create those files or start PostgreSQL.
 
 The platform must provide:
@@ -45,7 +38,7 @@ The cluster needs no app database mount or storage node label.
 
 ## 2. Connect the deployment Git repository
 
-Open the Argo CD UI following [infra/environments/local's sign-in instructions](../../../infra/environments/local/README.md#2-install-argo-cd-and-shared-ingress).
+Open the Argo CD UI following [infra/environments/local's sign-in instructions](https://github.com/pquarg/infra/blob/main/environments/local/README.md#2-install-argo-cd-and-shared-ingress).
 Under **Settings → Repositories**, connect
 `git@github.com:pquarg/gitops.git` with a read-only Git credential usable
 by the `default` project. Argo CD must show the repository connection as
@@ -121,8 +114,8 @@ app Service. Docker Desktop and the cluster must remain running.
 ## Recovery
 
 The current Compose database survives kind replacement independently. Follow
-[platform rebuild](../../../infra/environments/local/docs/rebuild.md#rebuild-with-the-external-compose-database)
-and [database backup/restore](../../../infra/environments/local/docs/database.md#backup-and-restore).
+[platform rebuild](https://github.com/pquarg/infra/blob/main/environments/local/docs/rebuild.md#rebuild-with-the-external-compose-database)
+and [database backup/restore](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#backup-and-restore).
 Recreate Kubernetes Secrets/images and verify Pod connectivity before registration;
 verify existing records and login afterward.
 

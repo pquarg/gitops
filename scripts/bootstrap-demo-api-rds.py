@@ -242,8 +242,9 @@ def main():
             )
             if previous.strip():
                 raise RuntimeError(
-                    "Previous app connection Secret exists. Preserve its database "
-                    "password in demo-api-secrets before bootstrap; follow docs/app-rename.md."
+                    "Another app connection Secret exists. Preserve its database "
+                    "password in demo-api-secrets before bootstrap; follow "
+                    "docs/registration-conflicts.md#resolve-a-database-credential-conflict."
                 )
         url, password = app_credentials(json.loads(existing) if existing.strip() else None, host)
         commands.redactions.extend([password, url])

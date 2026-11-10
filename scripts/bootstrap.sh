@@ -48,24 +48,24 @@ kube=(kubectl "--kubeconfig=$kubeconfig" "--context=$context")
 "${kube[@]}" get nodes > /dev/null
 "${kube[@]}" -n argocd wait --for=condition=Established \
   crd/applications.argoproj.io crd/applicationsets.argoproj.io --timeout=120s
-# Renaming registrations in place can leave two reconcilers owning one workload.
-# Require the non-cascading handoff before creating the new registration chain.
+# Conflicting registrations can leave two reconcilers owning one workload.
+# Require an ownership review before creating the registration chain.
 for legacy in application/root applicationset/staging-apps applicationset/aws-apps; do
   legacy_registration="$("${kube[@]}" -n argocd get "$legacy" --ignore-not-found -o name)"
   if [[ -n "$legacy_registration" ]]; then
-    printf 'Error: legacy registration %s exists; follow docs/registration-migration.md first.\n' "$legacy" >&2
+    printf 'Error: conflicting registration %s exists; follow docs/registration-conflicts.md first.\n' "$legacy" >&2
     exit 1
   fi
 done
 registrations="$("${kube[@]}" -n argocd get applications -o jsonpath='{range .items[*]}{.metadata.name}{":"}{.spec.source.path}{"\n"}{end}')"
 while IFS=: read -r name path; do
   if [[ "$name" == myfastapiapp || "$path" == apps/myfastapiapp/overlays/* ]]; then
-    printf 'Error: previous app registration %s exists; follow docs/app-rename.md first.\n' "$name" >&2
+    printf 'Error: conflicting app registration %s exists; follow docs/registration-conflicts.md first.\n' "$name" >&2
     exit 1
   fi
   for prefix in staging aws; do
     if [[ "$name" == "$prefix-"* && "$path" == "apps/${name#"$prefix-"}/overlays/"* ]]; then
-      printf 'Error: legacy Application %s exists; follow docs/registration-migration.md first.\n' "$name" >&2
+      printf 'Error: conflicting Application %s exists; follow docs/registration-conflicts.md first.\n' "$name" >&2
       exit 1
     fi
   done

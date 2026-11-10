@@ -2,7 +2,7 @@
 
 The live request path is CloudFront HTTPS → private VPC origin → internal ALB →
 FastAPI → RDS. The default `*.cloudfront.net` hostname supplies the public
-certificate. Keep the ALB internal; private origin HTTP is unchanged.
+certificate. The ALB is internal and its private origin connection uses HTTP.
 These instructions describe desired configuration and checks, not current health.
 
 ## 1. Prepare restricted ALB access

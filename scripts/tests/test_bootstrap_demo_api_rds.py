@@ -109,11 +109,11 @@ class BootstrapTests(unittest.TestCase):
         self.assertFalse(pod["spec"]["automountServiceAccountToken"])
         self.assertEqual(len([a for a, _ in fake.calls if "delete" in a]), 2)
 
-    def test_rename_requires_existing_password_before_database_login_changes(self):
+    def test_conflicting_secret_requires_existing_password_before_database_login_changes(self):
         fake = FakeCommands(previous_secret=True)
         status, output = self.invoke(fake)
         self.assertEqual(status, 1)
-        self.assertIn("docs/app-rename.md", output)
+        self.assertIn("docs/registration-conflicts.md#resolve-a-database-credential-conflict", output)
         self.assertFalse(any(r["kind"] == "Secret" for r in fake.created))
         self.assertFalse(any("get-secret-value" in argv or "exec" in argv for argv, _ in fake.calls))
 

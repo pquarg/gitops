@@ -17,8 +17,8 @@ git diff --check
 By default both overlays and both environment-specific registrations are rendered.
 The validator checks app names, base/overlay entry points, Bash syntax, bootstrap
 failure/selection behavior, credential helper tests and strict schemas. Additional
-regression checks protect the existing local PV identity and retention, AWS/local
-resource isolation, sync policies and matching API/migration images. `--environment`
+regression checks protect external-database ownership, AWS/local resource
+isolation, sync policies and matching API/migration images. `--environment`
 selects the rendered resources for schema/placeholder checking; the shared safety
 regression checks still cover both environments.
 
@@ -28,7 +28,7 @@ validation fetches built-in schemas and Argo CD schemas from the configured CRD
 catalog; unknown kinds fail instead of being silently skipped. Internet access
 is required. No Docker, AWS credentials or Kubernetes API access is required.
 CI runs the same script with `--no-placeholders` on pushes and pull requests.
-The old `--ready` spelling remains a compatibility alias; it performs the same
+The `--ready` spelling is an alias for `--no-placeholders`; it performs the same
 configuration checks and never checks runtime readiness.
 
 ## Server dry-run

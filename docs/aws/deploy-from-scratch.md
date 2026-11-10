@@ -15,8 +15,9 @@ account `245361883993` and Region `eu-north-1`:
 aws sts get-caller-identity --profile aws-project --region eu-north-1
 ```
 
-The existing S3 backend and bootstrap key remain unchanged. If absent, follow
-[backend creation](../../../infra/environments/aws/dev/docs/teardown.md#rebuild-after-deleting-the-backend).
+Create the protected S3 state bucket using
+[backend setup](https://github.com/pquarg/infra/blob/main/docs/state.md#create-the-aws-state-backend).
+If it already exists, verify its ownership and state keys before initializing.
 Never create fresh local state over an existing remote installation. Inspect
 which stages/resources exist before proceeding. Keep state/Secret backups outside
 Git. For existing data, follow the app's backup/recovery procedure rather than
@@ -113,7 +114,7 @@ The checks require an Active controller-created ALB with healthy targets. Edge
 looks it up; never import it into Terraform. The full edge plan provisions VPC
 origin, distribution, functions, headers and encrypted access-log delivery.
 CloudFront log-delivery resources stay explicitly `us-east-1`; the bucket and
-all VPC resources stay Stockholm. Review retained-log choices if an old bucket
+all VPC resources stay Stockholm. Review retained-log choices if a log bucket
 survived; import existing resources only with validated provider IDs and a private
 ownership ledger, never allow duplicate ownership or a bucket replacement.
 

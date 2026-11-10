@@ -1,8 +1,7 @@
 # demo-api local deployment
 
-The desired namespace is `demo-api`, while the existing PostgreSQL database/login
-remain `myfastapiapp`. Existing installations need the
-[app rename handoff](../../../../docs/app-rename.md) before publication or sync.
+The namespace and Argo CD Application are `demo-api`. The PostgreSQL database
+and restricted database login are both named `myfastapiapp`.
 
 Run commands from `gitops`. Source, image builds and Alembic revisions live in
 the separate `../apps/demo-api` repository; the deployment database is
@@ -30,14 +29,14 @@ and the database password are separate credentials.
 
 ### 1. Start the deployment database
 
-First follow [database provisioning](../../../../../infra/environments/local/docs/database.md#first-setup).
+First follow [database provisioning](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#first-setup).
 From `infra/environments/local`, `./scripts/local-database.sh status` must show a healthy
 PostgreSQL service. The app password is in `app-password` under the directory
 configured by `LOCAL_DB_SECRETS_DIR` in `infra/environments/local/database/.env`; the suggested
 directory is `$HOME/.local/share/infra-local/database-secrets`.
 Missing configuration/password files on a fresh setup mean database first
 setup is incomplete. For an existing database, preserve its credentials and
-follow the [database lifecycle guide](../../../../../infra/environments/local/docs/database.md#lifecycle-and-credentials).
+follow the [database lifecycle guide](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#lifecycle-and-credentials).
 
 ### 2. Create the namespace and registry Secret
 
@@ -88,10 +87,9 @@ Use the existing `app-password`, not the admin password or GHCR PAT. Passwords
 generated with `openssl rand -hex 24` need no URL encoding; URL-encode special
 characters in other passwords.
 
-`cp -n` preserves an existing file. If reusing one, review its connection value:
-`myfastapiapp-postgres-service:5432` is the old in-cluster address and will not
-reach the separate Compose database. Update the host, port and password to
-match the current database before applying it.
+`cp -n` preserves an existing file. Review its host, port and password against
+the running Compose database before applying it. From kind Pods on Docker
+Desktop, the connection must use `host.docker.internal` and the published host port.
 If the existing file stores the connection as `data.AUTH_DATABASE_URL`, that
 value is base64-encoded. Replace that entry with the example's `stringData`
 entry to edit the URL as plain text.
@@ -148,7 +146,7 @@ kubectl --context kind-deployment -n demo-api rollout status deployment/demo-api
 ```
 
 Changing a password file or Kubernetes Secret does not rotate an existing database
-role. Follow [database credential rotation](../../../../../infra/environments/local/docs/database.md#lifecycle-and-credentials),
+role. Follow [database credential rotation](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#lifecycle-and-credentials),
 then run the connectivity probe and verify readiness/login.
 
 ## Make the app image available
@@ -228,9 +226,9 @@ Events retain earlier errors; match them to the current Pod and its timestamp.
 | --- | --- |
 | GHCR `401 Unauthorized`, `ImagePullBackOff` or `FailedToRetrieveImagePullSecret` | Check `registry-credentials` exists in `demo-api`. Rerun the [registry helper](../../../../docs/local/credentials.md#registry-authentication) with a valid classic PAT with `read:packages` and package access. |
 | `CreateContainerConfigError` with `secret "demo-api-secrets" not found` | Apply the filled connection Secret from [credential setup](#3-configure-the-database-connection-secret). |
-| `failed to resolve host 'myfastapiapp-postgres-service'` | The connection still uses the old in-cluster address. Update the ignored Secret file to `host.docker.internal:5433`, use the current Compose app password and apply it again. |
-| Connection refused or timed out | Check Docker Desktop, PostgreSQL health, the configured host port and the Pod-to-host route. See [database setup](../../../../../infra/environments/local/docs/database.md#first-setup). |
-| Password authentication failed | Use the existing Compose password for the `myfastapiapp` database login. Replacing a password file does not rotate an initialized database; follow [credential rotation](../../../../../infra/environments/local/docs/database.md#lifecycle-and-credentials). |
+| Database hostname cannot be resolved | Check `AUTH_DATABASE_URL` uses `host.docker.internal:5433` from kind Pods. Apply the corrected Secret and verify the Pod-to-host connection. |
+| Connection refused or timed out | Check Docker Desktop, PostgreSQL health, the configured host port and the Pod-to-host route. See [database setup](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#first-setup). |
+| Password authentication failed | Use the existing Compose password for the `myfastapiapp` database login. Replacing a password file does not rotate an initialized database; follow [credential rotation](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#lifecycle-and-credentials). |
 | Database probe appears to hang after `job.batch/... created` | Inspect the Job status and logs below. The helper waits up to 120 seconds for success even if the Job has failed. |
 
 For a waiting database probe, copy its `local-db-check-...` name from the
@@ -279,7 +277,7 @@ if a failed release skipped image publication.
 
 1. Disable auto-sync on `demo-api` in Argo CD and wait for active
    syncs/migration Jobs to finish. The ApplicationSet preserves this live pause.
-2. Follow [backup and restore verification](../../../../../infra/environments/local/docs/database.md#backup-and-restore).
+2. Follow [backup and restore verification](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#backup-and-restore).
    Run the Compose backup helper from `infra/environments/local`. Keep writers paused when
    the recovery point must preserve every write through the change.
 3. Validate and review before publishing:
@@ -303,17 +301,17 @@ if a failed release skipped image publication.
 If migrations succeed but the API fails, the schema has already changed. Review
 compatibility before reverting the app image; Git rollback does not undo migrations.
 For deliberate disposable-data resets, follow the
-[Compose reset procedure](../../../../../infra/environments/local/docs/database.md#deliberately-reset-disposable-app-data).
+[Compose reset procedure](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#deliberately-reset-disposable-app-data).
 
 ## Recovery after a cluster rebuild
 
 The database continues running outside kind, with its Docker volume and roles
-unchanged. Follow [platform rebuild](../../../../../infra/environments/local/docs/rebuild.md),
+unchanged. Follow [platform rebuild](https://github.com/pquarg/infra/blob/main/environments/local/docs/rebuild.md),
 recreate the app namespace, app connection Secret, registry/Git credentials and
 selected image, then run the Pod connectivity probe before registration.
 No database directory or storage mount is required for this app on a fresh cluster.
 
 Database recovery is independent of cluster recreation. Follow
-[backup/restore](../../../../../infra/environments/local/docs/database.md#backup-and-restore)
+[backup/restore](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#backup-and-restore)
 and verify actual app behaviour before traffic. Password files only initialize
 empty storage; keep the passwords matching the existing database roles.

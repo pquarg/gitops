@@ -1,8 +1,5 @@
 # Set up AWS deployments
 
-For an existing `myfastapiapp` deployment or old ALB origin, use the
-[app rename and AWS origin handoff](../app-rename.md) before publication or sync.
-
 For the complete infrastructure-to-public-HTTPS walkthrough, use
 [deploy from start to finish](deploy-from-scratch.md). This page is the shorter
 cluster/application setup reference. For removal, use [teardown](teardown.md).
@@ -11,17 +8,14 @@ Run commands from this repository root. Install AWS CLI v2, kubectl, Python 3,
 and the [validation tools](validation.md). Complete the
 [infrastructure contract](infrastructure.md) in `infra/environments/aws/dev` first.
 
-GitOps `--environment aws` currently maps to infrastructure `--environment aws/dev`.
-
-For an existing `root` / prefixed-app installation, follow the
-[registration migration](../registration-migration.md) before publishing the new
-names or running bootstrap.
+GitOps `--environment aws` maps to infrastructure `--environment aws/dev`.
 
 ## 1. Select the project and cluster
 
 Confirm the selected Region in **AWS Settings > View all projects > Overview >
 Additional Info > Region**, and plan/spend status in **AWS Settings > Billing**.
-Your existing `aws-project` profile selects `eu-north-1`; use the confirmed values:
+Configure and authenticate the `aws-project` profile for the configured account
+and Region `eu-north-1`, then verify its identity:
 
 ```sh
 EKS_CONTEXT=aws-deployment-project

@@ -1,14 +1,41 @@
 # GitOps application deployments
 
-Existing `myfastapiapp` deployments need the [app rename handoff](docs/app-rename.md)
-**before publishing** this checkout. The new app is `demo-api`; its existing
-database names, login and storage identities remain `myfastapiapp`.
-
 One repository deploys the same applications to local kind and AWS EKS.
 Kustomize combines a shared app base with an environment overlay. Each cluster's
 Argo CD reads only its own registrations and overlays from this Git repository.
-Application source and image builds remain in `../apps/`; platform provisioning
-remains in the independent `../infra` repository.
+Application source and image builds live in the
+[demo-api repository](https://github.com/pquarg/myfastapiapp/blob/main/README.md); platform provisioning lives in
+the independent [infrastructure repository](https://github.com/pquarg/infra/blob/main/README.md).
+
+| Environment | Platform | Database | App sync |
+| --- | --- | --- | --- |
+| Local | kind and shared Traefik | Separate Compose PostgreSQL | Automatic |
+| AWS | EKS, internal ALB and CloudFront | Private RDS with verified TLS | Manual |
+
+The project is a deployment learning lab. The AWS configuration restricts public
+access to operator IPs and uses one app replica and single-AZ RDS. See the
+[architecture guide](docs/aws/architecture.md) for request flow, resource
+ownership and migration order.
+
+## Get the companion repositories
+
+Setup commands use this workspace layout. Clone into a new directory:
+
+```sh
+mkdir -p deployment-project/apps
+cd deployment-project
+git clone git@github.com:pquarg/myfastapiapp.git apps/demo-api
+git clone git@github.com:pquarg/gitops.git gitops
+git clone git@github.com:pquarg/infra.git infra
+cd gitops
+```
+
+Repository access is required. The app checkout is needed when developing or
+publishing images; deployment can use an already published image. Platform
+setup reads the infrastructure checkout, while Argo CD reads published GitOps
+Git and needs no sibling checkouts inside the cluster.
+
+## Repository layout
 
 ```text
 apps/demo-api/
@@ -34,15 +61,12 @@ Argo CD before registration. Local apps sync automatically; AWS apps sync manual
 The app greeting is also shared: `Hello from FastAPI!`. Platform-specific database,
 ingress and TLS settings remain in overlays.
 
-Existing clusters using `root`, `staging-*` or `aws-*` registrations must follow
-the [registration migration](docs/registration-migration.md) **before publishing**
-this naming change. Bootstrap refuses legacy registrations to prevent overlapping
-ownership.
-
 ## Set up an environment
 
 Follow [local setup](docs/local/setup.md) or [AWS setup](docs/aws/setup.md), including
 platform preparation, Git access, app credentials and image availability.
+For a fresh AWS environment, use the [complete deployment walkthrough](docs/aws/deploy-from-scratch.md),
+starting with state backend setup.
 
 For local setup, finish the [app prerequisites](docs/local/setup.md#3-prepare-the-apps)
 before registration: healthy Compose PostgreSQL, both app Secrets and a passing
@@ -92,8 +116,8 @@ access, but no running cluster or AWS credentials. Use `--environment local` or
 - [Add an app](docs/adding-apps.md)
 - [Local app releases, database backups and recovery](apps/demo-api/overlays/local/README.md)
 - [AWS app releases, RDS and recovery](apps/demo-api/overlays/aws/README.md)
-- [Local platform](../infra/environments/local/README.md)
-- [AWS platform](../infra/environments/aws/dev/README.md)
+- [Local platform](https://github.com/pquarg/infra/blob/main/environments/local/README.md)
+- [AWS platform](https://github.com/pquarg/infra/blob/main/environments/aws/dev/README.md)
 
 Local PostgreSQL is provisioned separately by `infra/environments/local`, outside kind,
 just as RDS is provisioned outside EKS. App sync runs migrations and rolls out the

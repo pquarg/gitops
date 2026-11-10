@@ -1,8 +1,7 @@
 # demo-api on AWS
 
-The desired namespace is `demo-api`; RDS database/login remain `myfastapiapp`.
-For existing installations, follow the [app and ALB handoff](../../../../docs/app-rename.md)
-before publication or sync. Keep the current database password when preparing the new Secret.
+The namespace and Argo CD Application are `demo-api`. The RDS database and
+restricted database login are both named `myfastapiapp`.
 
 Run commands from the deployment repository root with an explicit `EKS_CONTEXT`.
 Application code, Dockerfile and Alembic revisions live in the separate
@@ -23,7 +22,7 @@ availability requirements are known.
 
 ## Provision credentials
 
-For this project's existing Terraform-managed RDS instance, initialize the fresh
+After Terraform provisions the RDS instance, initialize the fresh
 database from the deployment repository root:
 
 ```sh
@@ -87,9 +86,9 @@ kubectl --context "$EKS_CONTEXT" -n demo-api apply \
 ```
 
 Provision `registry-credentials` in the same namespace using the
-[GHCR instructions](../../../../docs/aws/credentials.md). The existing image remains in
-GHCR. ECR can be introduced later along with image publishing and EKS pull access;
-changing the image name alone does not migrate the image.
+[GHCR instructions](../../../../docs/aws/credentials.md). The selected image is
+published to GHCR. A different registry requires coordinated image publishing,
+release selection and pull credentials.
 
 ## First deployment
 

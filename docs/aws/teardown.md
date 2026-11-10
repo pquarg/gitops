@@ -2,7 +2,7 @@
 
 Choose retention and destructive scope before running commands. This procedure
 is for reviewed operator work; it is not a validation test. The
-[automated command](../../../infra/environments/aws/dev/docs/teardown.md) deletes runtime, database
+[automated command](https://github.com/pquarg/infra/blob/main/environments/aws/dev/docs/teardown.md) deletes runtime, database
 recovery data and access logs, retaining the backend unless `--delete-backend`
 is selected. Use the manual sequence here to retain recovery copies or logs.
 
@@ -132,7 +132,7 @@ detached and recorded. Do not claim removal merely because Terraform exited zero
 ## 7. Backend and recovery
 
 Retain bootstrap/state by default. Only a separately authorized backend retirement
-should delete its versions; use the [backend-last procedure](../../../infra/environments/aws/dev/docs/teardown.md).
+should delete its versions; use the [backend-last procedure](https://github.com/pquarg/infra/blob/main/environments/aws/dev/docs/teardown.md).
 Never destroy the bucket while the Terraform executing deletion uses state in it.
 
 Private configs/ledger/states remain until recovery/removal is verified. Restore

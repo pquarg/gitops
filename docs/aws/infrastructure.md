@@ -19,15 +19,15 @@ selected in `infra/environments/aws/dev`; this repo expects their CRDs to be ins
 ## Required infrastructure
 
 - Use the project's selected Region. Confirm it in **AWS Settings > View all
-  projects > Overview > Additional Info > Region**. The existing local
-  `aws-project` profile currently selects `eu-north-1`; confirm that before applying
+  projects > Overview > Additional Info > Region**. Configure and authenticate
+  the local `aws-project` profile for `eu-north-1`; verify its account before applying
   infrastructure. Check plan type and spend status in **AWS Settings > Billing**.
 - Provide private worker/ALB subnets in at least two Availability Zones, tagged
   `kubernetes.io/role/internal-elb=1` for controller discovery, with sufficient
   free IPv4 addresses. Keep database subnets isolated. Public subnets support
   the NAT gateway; the VPC also needs an internet gateway for CloudFront VPC origins.
 - Workers need access to GitHub, GHCR and other registries used by cluster
-  components. The current image remains `ghcr.io/pquarg/demo-api:0.1.13`.
+  components. The selected image is `ghcr.io/pquarg/demo-api:0.1.13`.
   Match worker CPU architecture to the published image; do not assume a local
   Apple Silicon build works on an AMD64 worker.
 - Provide access from the operator's machine or CI to the EKS API. Script commands

@@ -73,10 +73,10 @@ for env in local aws; do
       [[ "$result" != 0 ]] || fail "$env $scenario must fail"
       if grep -q '<apply>' "$tmp/log"; then fail 'failure must stop registration'; fi
       if [[ "$scenario" == legacy-* && "$scenario" != legacy-query-error ]]; then
-        grep -q 'docs/registration-migration.md' "$tmp/out" || fail 'legacy migration guidance missing'
+        grep -q 'docs/registration-conflicts.md' "$tmp/out" || fail 'registration conflict guidance missing'
       fi
       if [[ "$scenario" == previous-app ]]; then
-        grep -q 'docs/app-rename.md' "$tmp/out" || fail 'app rename guidance missing'
+        grep -q 'docs/registration-conflicts.md' "$tmp/out" || fail 'registration conflict guidance missing'
       fi
       if [[ "$scenario" == class ]]; then
         infrastructure_target=local
