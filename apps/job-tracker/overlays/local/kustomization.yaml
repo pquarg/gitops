@@ -7,6 +7,6 @@ resources:
   - ingress.yaml
 images:
   - name: ghcr.io/pquarg/job-tracker-backend
-    newTag: 0.1.0-m4.3
+    newTag: 0.1.0-m4.4
   - name: ghcr.io/pquarg/job-tracker-frontend
-    newTag: 0.1.0-m4.1
+    newTag: 0.1.0-m4.2

@@ -99,3 +99,9 @@ paths = {p['path']: p['backend']['service']['name'] for p in route['http']['path
 assert paths == {'/api/': 'job-tracker-api', '/': 'job-tracker-frontend'}
 assert not (ROOT / 'apps/job-tracker/overlays/aws').exists(), 'Tracker release is local only'
 print('Tracker release ordering, ownership, routing and container boundaries passed.')
+
+tracker_config = tracker['ConfigMap', 'job-tracker-config']['data']
+assert tracker_config['JT_AI_PROVIDER'] == 'openai'
+assert tracker_config['JT_AI_MODEL']
+assert not any('KEY' in key or 'SECRET' in key for key in tracker_config)
+print('Tracker OpenAI configuration keeps credentials out of rendered manifests.')

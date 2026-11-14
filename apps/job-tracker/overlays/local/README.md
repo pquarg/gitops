@@ -14,9 +14,9 @@ FastAPI and `/` to the static frontend; demo-api and Mailpit keep their routes.
    in [kustomization.yaml](kustomization.yaml), then load into the existing cluster:
 
    ```sh
-   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.3 ../apps/job-tracker/backend
-   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.1 ../apps/job-tracker/frontend
-   kind load docker-image ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.3 ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.1 --name deployment
+   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.4 ../apps/job-tracker/backend
+   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.2 ../apps/job-tracker/frontend
+   kind load docker-image ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.4 ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.2 --name deployment
    ```
 
    These are local loaded releases, not published GHCR packages. Use a new tag
@@ -39,13 +39,26 @@ FastAPI and `/` to the static frontend; demo-api and Mailpit keep their routes.
    privileges and transactional DDL, and actually parses text in bubblewrap.
    It creates and deletes only its temporary probe Job. Continue only when it
    reports all checks passed. Filled Secrets stay outside Kustomize and Git.
-4. Providers are disabled by empty private settings. For live discovery configure
-   an Ollama-compatible HTTPS endpoint/model, accurate processing/retention terms
-   and Brave key/terms in the Secret; see the app's
-   [provider contract](https://github.com/pquarg/job-tracker/blob/main/docs/provider-contracts.md).
-   Do not put keys in ConfigMaps, images or frontend variables. Pods use a new
-   disclosure revision after restart; each user must approve it. A missing
-   provider is displayed as unavailable; no fixture mode exists in the release.
+4. OpenAI is the only AI/search provider. In the private deployment env file set
+   `OPENAI_API_KEY` to your project key; `JT_AI_PROVIDER=openai` and
+   `JT_AI_MODEL=gpt-6-astra` are the current configurable defaults. Review the
+   app's [processing and budget disclosure](https://github.com/pquarg/job-tracker/blob/main/docs/openai-provider.md).
+   No Brave account/key or Ollama endpoint is required. The standard disclosure
+   describes API retention; `store=false` is not a zero-retention guarantee.
+   An optional `JT_AI_RETENTION` override must match verified account terms.
+
+   ```sh
+   ./scripts/configure-job-tracker.py --environment local --context kind-deployment --env-file /absolute/private/job-tracker/deployment.env
+   ```
+
+   The mode-600 env file must be outside Git and contain the dedicated local
+   `JT_DATABASE_URL`. It may also hold the origin/cookie/model/provider settings
+   shown in the app environment example. The helper does not execute shell
+   expressions or print values. It removes retired Ollama/Brave Secret fields,
+   preserves unrelated entries and updates only `job-tracker-secrets`. Empty
+   `OPENAI_API_KEY` keeps manual review available and research disabled. Never
+   put keys in ConfigMaps or frontend variables. Restart API/worker after any
+   private settings update, then approve the renewed disclosure in each account.
 5. Run `./scripts/validate.sh --no-placeholders`,
    `./scripts/validate-server.sh job-tracker --environment local --context kind-deployment`
    and `git diff --check`. Review, commit and push the overlay only after these

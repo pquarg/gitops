@@ -5,3 +5,5 @@ metadata:
 data:
   JT_ORIGIN: http://job-tracker.localhost
   JT_COOKIE_SECURE: "false"
+  JT_AI_PROVIDER: openai
+  JT_AI_MODEL: gpt-6-astra
