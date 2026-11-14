@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-tracker-worker
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: job-tracker-worker
+  template:
+    metadata:
+      labels:
+        app: job-tracker-worker
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: ghcr.io/pquarg/job-tracker-backend
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: job-tracker-config
+            - secretRef:
+                name: job-tracker-secrets
+          command: [python, -m, job_tracker.worker]
+          # Rootless bubblewrap creates nested user/mount/network namespaces.
+          # RuntimeDefault blocks these syscalls; no capabilities/host mounts are granted.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: Unconfined
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,time; assert time.time()-os.stat('/tmp/job-tracker-worker-heartbeat').st_mtime < 600"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 768Mi}
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: temporary
+          emptyDir:
+            sizeLimit: 64Mi

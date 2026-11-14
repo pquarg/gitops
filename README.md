@@ -113,6 +113,7 @@ access, but no running cluster or AWS credentials. Use `--environment local` or
 `--environment aws` to select one environment's schema validation. See
 [validation](docs/validation.md) for limits and explicit-context server dry-runs.
 
+- [Job tracker local release](apps/job-tracker/overlays/local/README.md)
 - [Add an app](docs/adding-apps.md)
 - [Local app releases, database backups and recovery](apps/demo-api/overlays/local/README.md)
 - [AWS app releases, RDS and recovery](apps/demo-api/overlays/aws/README.md)

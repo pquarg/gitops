@@ -67,3 +67,35 @@ for env in ('local', 'aws'):
     assert 'environment' not in appset['spec']['template']['metadata'].get('labels', {})
     assert bool(template['syncPolicy'].get('automated')) == (env == 'local')
 print('Rendered environment isolation, external database and image consistency checks passed.')
+
+tracker = render('apps/job-tracker/overlays/local')
+backend_images = [tracker[kind, name]['spec']['template']['spec']['containers'][0]['image']
+                  for kind, name in [('Deployment', 'job-tracker-api'),
+                                     ('Deployment', 'job-tracker-worker'),
+                                     ('Job', 'job-tracker-migrate')]]
+assert len(set(backend_images)) == 1, 'Tracker API/worker/migration must use the same release'
+assert all(':0.1.0-' in image for image in backend_images)
+assert not any(k in ('Secret', 'PersistentVolume', 'PersistentVolumeClaim', 'StatefulSet')
+               for k, _ in tracker), 'Do not publish private settings or provision databases in GitOps'
+assert tracker['Job', 'job-tracker-migrate']['metadata']['annotations']['argocd.argoproj.io/sync-wave'] == '0'
+for component in ('api', 'worker', 'frontend'):
+    deployment = tracker['Deployment', 'job-tracker-' + component]
+    assert deployment['metadata']['annotations']['argocd.argoproj.io/sync-wave'] == '1'
+    pod = deployment['spec']['template']['spec']
+    assert pod['automountServiceAccountToken'] is False
+    assert pod['securityContext']['runAsNonRoot'] is True
+    assert not any('hostPath' in volume for volume in pod.get('volumes', []))
+    container = pod['containers'][0]
+    assert container['securityContext']['allowPrivilegeEscalation'] is False
+    assert container['securityContext']['readOnlyRootFilesystem'] is True
+    assert container['securityContext']['capabilities']['drop'] == ['ALL']
+    if component != 'frontend':
+        assert {'secretRef': {'name': 'job-tracker-secrets'}} in container['envFrom']
+    if component != 'worker':
+        assert pod['securityContext']['seccompProfile']['type'] == 'RuntimeDefault'
+route = tracker['Ingress', 'job-tracker']['spec']['rules'][0]
+assert route['host'] == 'job-tracker.localhost'
+paths = {p['path']: p['backend']['service']['name'] for p in route['http']['paths']}
+assert paths == {'/api/': 'job-tracker-api', '/': 'job-tracker-frontend'}
+assert not (ROOT / 'apps/job-tracker/overlays/aws').exists(), 'Tracker release is local only'
+print('Tracker release ordering, ownership, routing and container boundaries passed.')

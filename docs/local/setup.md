@@ -55,6 +55,8 @@ Follow each app's README to provision its namespace, connection and registry
 Secrets and selected image before automatic sync. Run its Pod-to-database
 connectivity probe before registration.
 Start with [demo-api](../../apps/demo-api/overlays/local/README.md#provision-credentials).
+The [job-tracker local release](../../apps/job-tracker/overlays/local/README.md)
+adds a separate database/login, two loaded images and private provider settings.
 For more apps, follow [adding apps](../adding-apps.md) and
 [registry credentials](credentials.md#registry-authentication).
 
