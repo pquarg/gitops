@@ -372,3 +372,25 @@ Database recovery is independent of cluster recreation. Follow
 [backup/restore](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#backup-and-restore)
 and verify actual app behaviour before traffic. Password files only initialize
 empty storage; keep the passwords matching the existing database roles.
+
+## Temporary Gateway smoke test
+
+`gateway-smoke.localhost` routes to the existing `demo-api:80` Service through
+HTTPRoute `demo-api-gateway-smoke` and shared Gateway `traefik/traefik-gateway`.
+The existing app and Mailpit Ingresses remain in place. This temporary route
+requires the infra Gateway platform apply before publication. Full automatic
+app sync can rerun the unchanged migration hook; check database readiness first.
+The pinned HTTPRoute schema derives from infra's Gateway API v1.6.2 bundle.
+
+After Argo CD syncs, test `/health` and `/ready` with:
+
+```sh
+curl --fail --resolve gateway-smoke.localhost:80:127.0.0.1 http://gateway-smoke.localhost/health
+curl --fail --resolve gateway-smoke.localhost:80:127.0.0.1 http://gateway-smoke.localhost/ready
+```
+
+Successful status checks require `Accepted=True` and `ResolvedRefs=True` for the
+current route generation. Remove this temporary manifest and Kustomize entry
+through GitOps after verification, then explicitly prune only its HTTPRoute;
+automatic sync does not currently prune resources. App conversion is a later,
+separate change. Do not merge the entire conversion branch as this smoke test.

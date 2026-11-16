@@ -105,3 +105,15 @@ assert tracker_config['JT_AI_PROVIDER'] == 'openai'
 assert tracker_config['JT_AI_MODEL']
 assert not any('KEY' in key or 'SECRET' in key for key in tracker_config)
 print('Tracker OpenAI configuration keeps credentials out of rendered manifests.')
+
+# The distinct-host Gateway smoke test must retain the production Ingress.
+local = render('apps/demo-api/overlays/local')
+smoke = local['HTTPRoute', 'demo-api-gateway-smoke']['spec']
+assert smoke == {
+    'hostnames': ['gateway-smoke.localhost'],
+    'parentRefs': [{'name': 'traefik-gateway', 'namespace': 'traefik', 'sectionName': 'web'}],
+    'rules': [{'matches': [{'path': {'type': 'PathPrefix', 'value': '/'}}],
+               'backendRefs': [{'name': 'demo-api', 'port': 80}]}],
+}
+assert ('Ingress', 'demo-api') in local and ('Ingress', 'demo-api-mailpit') in local
+print('Gateway smoke route preserves existing Ingresses and backend paths.')

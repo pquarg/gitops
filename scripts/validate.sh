@@ -87,6 +87,7 @@ python3 tests/manifests.py
 kubeconform -strict -summary \
   -kubernetes-version "${KUBERNETES_VERSION:-1.36.0}" \
   -schema-location default \
+  -schema-location "$project_root/schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
   "$render_dir"/*.yaml
 printf 'GitOps configuration checks passed; deployment health is separate.\n'

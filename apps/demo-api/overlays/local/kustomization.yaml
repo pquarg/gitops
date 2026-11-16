@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - ../../base
   - ingress.yaml
+  - gateway-smoke.yaml
   - mailpit.yaml
 patches:
   - path: smtp-patch.yaml
