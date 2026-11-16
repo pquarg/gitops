@@ -23,8 +23,9 @@ is preserved; use a one-time full hook-enabled sync for its updates.
 | job-tracker.localhost | `/` | job-tracker-frontend:80 |
 
 HTTPRoutes name parent namespace `traefik` and listener `web`. Requests retain
-their full path. The API prefix matches `/api`, `/api/` and nested API paths;
-`/apix` selects the frontend. Local bootstrap checks Gateway readiness rather
+their full path. `/api/` and nested API paths select the API. An Exact `/api`
+rule preserves the previous frontend fallback despite Gateway prefix matching
+also matching that bare path. `/apix` selects the frontend. Local bootstrap checks Gateway readiness rather
 than depending on an IngressClass. AWS bootstrap retains its existing checks
 until the separate AWS configuration conversion is published.
 
