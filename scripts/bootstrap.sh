@@ -81,18 +81,14 @@ done
 "${kube[@]}" -n argocd rollout status statefulset/argocd-application-controller --timeout=300s
 if [[ "$environment" == local ]]; then
   "${kube[@]}" -n traefik rollout status deployment/traefik --timeout=300s
-  controller="$("${kube[@]}" get ingressclass traefik -o jsonpath='{.spec.controller}')"
-  expected_controller=traefik.io/ingress-controller
+  python3 "$project_root/scripts/check-gateway.py" --environment local --context "$context" --kubeconfig "$kubeconfig"
 else
   "${kube[@]}" -n kube-system rollout status deployment/aws-load-balancer-controller --timeout=300s
   controller="$("${kube[@]}" get ingressclass alb -o jsonpath='{.spec.controller}')"
-  expected_controller=ingress.k8s.aws/alb
-fi
-if [[ "$controller" != "$expected_controller" ]]; then
-  infrastructure_target=local
-  if [[ "$environment" == aws ]]; then infrastructure_target=aws/dev; fi
-  printf 'Error: provision the expected %s ingress controller through infra/environments/%s first.\n' "$environment" "$infrastructure_target" >&2
-  exit 1
+  if [[ "$controller" != ingress.k8s.aws/alb ]]; then
+    printf 'Error: provision the expected aws ingress controller through infra/environments/aws/dev first.\n' >&2
+    exit 1
+  fi
 fi
 printf 'Registering %s applications from gitops/main\n' "$environment"
 "${kube[@]}" -n argocd apply -f "$project_root/bootstrap/$bootstrap_file"

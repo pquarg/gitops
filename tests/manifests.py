@@ -106,10 +106,13 @@ for component in ('api', 'worker', 'frontend'):
         assert {'secretRef': {'name': 'job-tracker-secrets'}} in container['envFrom']
     if component != 'worker':
         assert pod['securityContext']['seccompProfile']['type'] == 'RuntimeDefault'
-route = tracker['Ingress', 'job-tracker']['spec']['rules'][0]
-assert route['host'] == 'job-tracker.localhost'
-paths = {p['path']: p['backend']['service']['name'] for p in route['http']['paths']}
-assert paths == {'/api/': 'job-tracker-api', '/': 'job-tracker-frontend'}
+route = tracker['HTTPRoute', 'job-tracker']['spec']
+assert route['hostnames'] == ['job-tracker.localhost']
+assert route['parentRefs'] == [{'name': 'traefik-gateway', 'namespace': 'traefik', 'sectionName': 'web'}]
+assert route['rules'] == [
+    {'matches': [{'path': {'type': 'PathPrefix', 'value': path}}], 'backendRefs': [{'name': service, 'port': 80}]}
+    for path, service in [('/api/', 'job-tracker-api'), ('/', 'job-tracker-frontend')]]
+assert not any(kind == 'Ingress' for kind, _ in tracker)
 assert not (ROOT / 'apps/job-tracker/overlays/aws').exists(), 'Tracker release is local only'
 print('Tracker release ordering, ownership, routing and container boundaries passed.')
 

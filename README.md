@@ -126,3 +126,7 @@ API against an existing database in both environments.
 
 Filled Secret files remain ignored and outside Kustomize. Keep database files,
 backups, credentials, Terraform state and saved plans outside version control.
+
+Local apps now use HTTPRoutes through shared Traefik Gateway API routing. See
+[local cutover and rollback](docs/local/gateway-cutover.md) for route verification,
+namespace attachment permissions and the separate Ingress-provider cleanup.

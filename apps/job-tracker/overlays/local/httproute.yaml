@@ -1,0 +1,27 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: job-tracker
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+      sectionName: web
+  hostnames: [job-tracker.localhost]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/
+      backendRefs:
+        - name: job-tracker-api
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: job-tracker-frontend
+          port: 80

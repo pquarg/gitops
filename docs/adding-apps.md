@@ -6,7 +6,9 @@ Use a lowercase DNS label of at most 63 characters. Reserve `argocd`, `traefik`,
 
 Add `apps/<app>/overlays/local/kustomization.yaml` and/or
 `apps/<app>/overlays/aws/kustomization.yaml`. Each overlay includes `../../base`,
-selects its release image and adds the environment's configuration and ingress.
+selects its release image and adds environment configuration and routing. Local
+overlays use HTTPRoutes and require their app namespace in infra's allowed-route
+selector; AWS retains its separately documented ALB Ingress configuration.
 An app can opt into one or both environments; creating a base alone deploys nothing.
 
 ```yaml
@@ -14,7 +16,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
-  - ingress.yaml
+  - httproute.yaml
 images:
   - name: ghcr.io/pquarg/billing-api
     newTag: "0.1.0"

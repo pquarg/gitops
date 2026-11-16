@@ -129,3 +129,17 @@ files as well as backups: source Git cannot recover them.
 After kind replacement, PostgreSQL remains in its existing external volume.
 Recreate the namespace/private Secrets, load both exact images, run the Pod probe,
 then allow registration/full sync. No database mount belongs in the cluster.
+
+
+## Gateway routing
+
+This overlay uses HTTPRoute `job-tracker` attached to shared Gateway
+`traefik/traefik-gateway`, listener `web`. The `/api/` PathPrefix selects
+`job-tracker-api:80`; `/` selects `job-tracker-frontend:80`. Paths are preserved.
+Gateway prefix matching also sends `/api` to the API and `/apix` to the frontend.
+The full migration hook and release images are unchanged. After publishing,
+verify the new route's current-generation Accepted/ResolvedRefs status, then
+explicitly prune only the old job-tracker Ingress. Auto-sync does not prune it.
+
+Follow [local Gateway cutover](../../../../docs/local/gateway-cutover.md) for
+verification evidence, staged publication, namespace permissions and rollback.

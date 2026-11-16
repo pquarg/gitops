@@ -46,7 +46,10 @@ updates and creates hook Jobs under generated names, preserving the existing
 migration Job and logs. It does not run migrations or persist resources. Admission
 webhooks must support/reach the dry-run. Local selection requires a kind context;
 AWS selection rejects kind contexts, and bootstrap additionally checks the matching
-platform ingress controller before registering anything.
+platform routing controller before registering anything. Local checks include
+Standard CRDs, GatewayClass acceptance and shared Gateway/listener readiness;
+AWS retains its existing IngressClass prerequisite. HTTPRoutes use the pinned
+Gateway API v1.6.2 schema under `schemas/`.
 
 Configuration validation cannot prove image availability, Secret presence,
 database compatibility, successful migrations, cluster health or endpoint health.
