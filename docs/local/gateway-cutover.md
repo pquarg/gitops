@@ -75,3 +75,25 @@ platform plan. Preserve Traefik's Helm address, Gateway CRDs, ports, Secrets and
 databases. After that cleanup, restore Ingress support through Terraform before
 rolling an app back to Ingress. Never delete Gateway CRDs as rollback or rebuild
 the cluster to fix ownership. See infra's shared Gateway lifecycle/state runbooks.
+
+
+## Fresh-cluster recovery verified
+
+On 16 November 2026, the local kind cluster was deliberately rebuilt with pinned
+Kubernetes `v1.36.4`, retaining the separate Compose databases. A single full
+platform apply installed Standard CRDs before Traefik and established the shared
+Gateway before app registration. The original release image content, connection/
+registry/repository credentials and Argo administrator/TLS Secrets were restored.
+No Helm release record or old ServiceAccount token was copied into the new cluster.
+
+Both app database probes and full hook-enabled syncs passed. Demo-api's existing
+auto-sync pause was preserved, while job-tracker retained automatic sync. Their
+new Applications reference the new ApplicationSet UID rather than stale owner
+metadata. Existing synthetic accounts/sessions and saved tracker records survived;
+login/logout, Mailpit password reset, original downloads, parsed content, saved
+search profiles, isolation and the `/api` path regression check passed again.
+All three local hostnames use accepted HTTPRoutes, without any Ingress resource.
+
+Use infra's rebuild/state runbooks and private pre-pause snapshots for recovery.
+Do not apply saved Application status/operations or re-enable a maintenance pause
+implicitly. No AWS deployment or paid research is part of this verification.
