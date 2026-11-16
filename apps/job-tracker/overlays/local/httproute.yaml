@@ -11,6 +11,15 @@ spec:
       sectionName: web
   hostnames: [job-tracker.localhost]
   rules:
+    # Preserve the original Ingress behavior for the bare path. Gateway
+    # PathPrefix /api/ also matches /api, so this Exact match takes priority.
+    - matches:
+        - path:
+            type: Exact
+            value: /api
+      backendRefs:
+        - name: job-tracker-frontend
+          port: 80
     - matches:
         - path:
             type: PathPrefix

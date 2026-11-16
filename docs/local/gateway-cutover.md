@@ -18,7 +18,8 @@ is preserved; use a one-time full hook-enabled sync for its updates.
 | --- | --- | --- |
 | demo-api.localhost | `/` | demo-api:80 |
 | mailpit.localhost | `/` | demo-api-mailpit:8025 |
-| job-tracker.localhost | `/api/` | job-tracker-api:80 |
+| job-tracker.localhost | `/api` Exact | job-tracker-frontend:80 |
+| job-tracker.localhost | `/api/` PathPrefix | job-tracker-api:80 |
 | job-tracker.localhost | `/` | job-tracker-frontend:80 |
 
 HTTPRoutes name parent namespace `traefik` and listener `web`. Requests retain
@@ -39,6 +40,7 @@ python3 scripts/check-gateway.py --environment local --context kind-deployment -
 python3 scripts/check-gateway.py --environment local --context kind-deployment --kubeconfig "$HOME/.kube/config" --namespace demo-api --route demo-api
 python3 scripts/check-gateway.py --environment local --context kind-deployment --kubeconfig "$HOME/.kube/config" --namespace demo-api --route demo-api-mailpit
 python3 scripts/check-gateway.py --environment local --context kind-deployment --kubeconfig "$HOME/.kube/config" --namespace job-tracker --route job-tracker
+python3 scripts/check-job-tracker-routing.py --environment local --context kind-deployment --kubeconfig "$HOME/.kube/config"
 kubectl --context kind-deployment get ingress,httproute -A
 ```
 

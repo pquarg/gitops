@@ -109,7 +109,7 @@ for component in ('api', 'worker', 'frontend'):
 route = tracker['HTTPRoute', 'job-tracker']['spec']
 assert route['hostnames'] == ['job-tracker.localhost']
 assert route['parentRefs'] == [{'name': 'traefik-gateway', 'namespace': 'traefik', 'sectionName': 'web'}]
-assert route['rules'] == [
+assert route['rules'] == [{'matches': [{'path': {'type': 'Exact', 'value': '/api'}}], 'backendRefs': [{'name': 'job-tracker-frontend', 'port': 80}]}] + [
     {'matches': [{'path': {'type': 'PathPrefix', 'value': path}}], 'backendRefs': [{'name': service, 'port': 80}]}
     for path, service in [('/api/', 'job-tracker-api'), ('/', 'job-tracker-frontend')]]
 assert not any(kind == 'Ingress' for kind, _ in tracker)

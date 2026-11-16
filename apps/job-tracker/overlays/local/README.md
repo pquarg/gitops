@@ -136,10 +136,21 @@ then allow registration/full sync. No database mount belongs in the cluster.
 This overlay uses HTTPRoute `job-tracker` attached to shared Gateway
 `traefik/traefik-gateway`, listener `web`. The `/api/` PathPrefix selects
 `job-tracker-api:80`; `/` selects `job-tracker-frontend:80`. Paths are preserved.
-Gateway prefix matching also sends `/api` to the API and `/apix` to the frontend.
+An Exact `/api` rule preserves the previous frontend fallback; `/api/` and
+nested API paths select the API, while `/apix` selects the frontend.
 The full migration hook and release images are unchanged. After publishing,
 verify the new route's current-generation Accepted/ResolvedRefs status, then
 explicitly prune only the old job-tracker Ingress. Auto-sync does not prune it.
 
 Follow [local Gateway cutover](../../../../docs/local/gateway-cutover.md) for
 verification evidence, staged publication, namespace permissions and rollback.
+
+Check the live path contract after sync/pruning:
+
+```sh
+python3 scripts/check-job-tracker-routing.py --environment local --context kind-deployment --kubeconfig "$HOME/.kube/config"
+```
+
+This integration check catches the trailing-slash matching difference observed
+during migration: Gateway PathPrefix matches `/api` even when the configured
+prefix is `/api/`; the previous Traefik Ingress sent bare `/api` to the frontend.
