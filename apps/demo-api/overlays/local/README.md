@@ -20,7 +20,7 @@ provisioned by `infra/environments/local`.
 The local and AWS overlays use the same API Deployment and migration Job. Both
 connect to an already provisioned external PostgreSQL database through
 `demo-api-secrets`. Local uses a separate Compose container; AWS uses RDS.
-The local overlay contains app configuration and Traefik ingress, with no
+The local overlay contains app configuration and Traefik HTTPRoutes, with no
 PostgreSQL workload or storage in the app sync.
 
 The local overlay also deploys a pinned Mailpit test inbox in namespace
@@ -60,7 +60,7 @@ A `202` acknowledges the request, not delivery. `503` means the API did not load
 SMTP settings; confirm the selected Git revision and completed API rollout.
 
 The inbox is unauthenticated and contains reset credentials, so use test
-accounts. Its web route uses the existing local Traefik ingress and kind's
+accounts. Its web route uses the existing local Traefik HTTPRoutes and kind's
 loopback host binding. SMTP has only a ClusterIP Service, without a host port or
 public ingress. There is no persistent volume: captured mail is discarded when
 the Pod is replaced. Storage is limited to 128 MiB and the oldest messages are
@@ -373,24 +373,24 @@ Database recovery is independent of cluster recreation. Follow
 and verify actual app behaviour before traffic. Password files only initialize
 empty storage; keep the passwords matching the existing database roles.
 
-## Temporary Gateway smoke test
+## Gateway routing and rollback
 
-`gateway-smoke.localhost` routes to the existing `demo-api:80` Service through
-HTTPRoute `demo-api-gateway-smoke` and shared Gateway `traefik/traefik-gateway`.
-The existing app and Mailpit Ingresses remain in place. This temporary route
-requires the infra Gateway platform apply before publication. Full automatic
-app sync can rerun the unchanged migration hook; check database readiness first.
-The pinned HTTPRoute schema derives from infra's Gateway API v1.6.2 bundle.
+The local overlay now uses HTTPRoutes `demo-api` and `demo-api-mailpit`, attached
+to `traefik/traefik-gateway`, listener `web`. Their numeric backend Service ports
+are 80 and 8025; request paths and original hostnames are preserved. The temporary
+`gateway-smoke.localhost` route has been removed from Git. AWS routing is unchanged
+by this local cutover.
 
-After Argo CD syncs, test `/health` and `/ready` with:
+After the full hook-enabled sync, check both routes' current-generation
+`Accepted=True` and `ResolvedRefs=True` conditions. Then explicitly prune only
+the obsolete demo-api/Mailpit Ingresses and `demo-api-gateway-smoke` HTTPRoute.
+Automatic sync does not prune these, and demo-api's live auto-sync pause must be
+preserved. Check health/readiness, login/session continuity and password reset
+through Mailpit after pruning; HTTP success while an old Ingress exists does not
+prove the new route carries the request. Images, Secrets and migrations stay
+unchanged, though a normal full sync reruns the existing migration hook.
 
-```sh
-curl --fail --resolve gateway-smoke.localhost:80:127.0.0.1 http://gateway-smoke.localhost/health
-curl --fail --resolve gateway-smoke.localhost:80:127.0.0.1 http://gateway-smoke.localhost/ready
-```
-
-Successful status checks require `Accepted=True` and `ResolvedRefs=True` for the
-current route generation. Remove this temporary manifest and Kustomize entry
-through GitOps after verification, then explicitly prune only its HTTPRoute;
-automatic sync does not currently prune resources. App conversion is a later,
-separate change. Do not merge the entire conversion branch as this smoke test.
+While the infra Ingress provider is enabled, rollback is a published GitOps
+revert followed by deliberate pruning of the replaced HTTPRoutes. Once provider
+cleanup has been applied, restore that support through a reviewed Terraform
+apply first. Leave Gateway CRDs installed and preserve database records.
