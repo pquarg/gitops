@@ -84,11 +84,7 @@ if [[ "$environment" == local ]]; then
   python3 "$project_root/scripts/check-gateway.py" --environment local --context "$context" --kubeconfig "$kubeconfig"
 else
   "${kube[@]}" -n kube-system rollout status deployment/aws-load-balancer-controller --timeout=300s
-  controller="$("${kube[@]}" get ingressclass alb -o jsonpath='{.spec.controller}')"
-  if [[ "$controller" != ingress.k8s.aws/alb ]]; then
-    printf 'Error: provision the expected aws ingress controller through infra/environments/aws/dev first.\n' >&2
-    exit 1
-  fi
+  python3 "$project_root/scripts/check-gateway.py" --environment aws --context "$context" --kubeconfig "$kubeconfig"
 fi
 printf 'Registering %s applications from gitops/main\n' "$environment"
 "${kube[@]}" -n argocd apply -f "$project_root/bootstrap/$bootstrap_file"

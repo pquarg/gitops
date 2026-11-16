@@ -8,7 +8,7 @@ Add `apps/<app>/overlays/local/kustomization.yaml` and/or
 `apps/<app>/overlays/aws/kustomization.yaml`. Each overlay includes `../../base`,
 selects its release image and adds environment configuration and routing. Local
 overlays use HTTPRoutes and require their app namespace in infra's allowed-route
-selector; AWS retains its separately documented ALB Ingress configuration.
+selector; AWS uses a per-app Gateway/HTTPRoute and LoadBalancer/TargetGroupConfiguration.
 An app can opt into one or both environments; creating a base alone deploys nothing.
 
 ```yaml
@@ -41,7 +41,7 @@ Use [demo-api's database setup](https://github.com/pquarg/infra/blob/main/enviro
 example.
 
 AWS databases and other cloud resources belong in `infra/environments/aws/dev`. The AWS overlay
-contains connection configuration, verified database TLS and an ALB Ingress.
+contains connection configuration, verified database TLS and an ALB Gateway/HTTPRoute and AWS load balancer/target group configuration.
 Use each app's own frontend security group and ALB name. Provision CloudFront after
 the controller creates a healthy ALB. Follow the [AWS infrastructure contract](aws/infrastructure.md).
 

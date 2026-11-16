@@ -96,7 +96,7 @@ Complete [cluster setup](../../../../docs/aws/setup.md) and ensure the RDS datab
 role already exist. This learning deployment starts with a fresh database;
 these manifests do not copy local data.
 
-Verify the frontend group configured in `ingress.yaml` matches
+Verify the frontend group configured in `load-balancer-configuration.yaml` matches
 `terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group`. The manifest
 uses internal ALB `dev-demo-api`, HTTP port 80, IP targets and
 controller-managed backend rules. The host-independent rule accepts the eventual
@@ -117,7 +117,7 @@ Sync order is:
 1. ConfigMaps and Service are applied in wave `0`; the wave `0` migration hook
    runs `python -m alembic upgrade head` against RDS.
 2. The API Deployment rolls out in wave `1` after migration success.
-3. The ALB Ingress is applied in wave `2` after the Deployment is healthy.
+3. Both AWS routing configurations, the Gateway and HTTPRoute are applied in wave `2` after the Deployment is healthy.
 
 A failed migration blocks the rollout. Inspect its logs and resolve the cause
 before retrying a sync. Do not bypass the hook to force a Deployment rollout.
@@ -130,11 +130,11 @@ changes must remain compatible with the running app or use a planned maintenance
 kubectl --context "$EKS_CONTEXT" -n argocd get application demo-api
 kubectl --context "$EKS_CONTEXT" -n demo-api \
   rollout status deployment/demo-api --timeout=300s
-kubectl --context "$EKS_CONTEXT" -n demo-api get pods,jobs,ingress
+kubectl --context "$EKS_CONTEXT" -n demo-api get pods,jobs,gateway,httproute
 kubectl --context "$EKS_CONTEXT" -n demo-api \
   logs job/demo-api-migrate
-kubectl --context "$EKS_CONTEXT" -n demo-api get ingress demo-api \
-  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+kubectl --context "$EKS_CONTEXT" -n demo-api get gateway demo-api \
+  -o jsonpath='{.status.addresses[0].value}'
 ```
 
 The returned hostname is private. Use it and the deterministic ALB name for the
@@ -229,3 +229,7 @@ After an EKS rebuild, recreate Git access and the app's namespace and Secrets,
 bootstrap Argo CD, and sync the app against the retained RDS database. Do not run
 local database reset scripts against AWS. Test recovery into a disposable
 environment before relying on a backup.
+
+Follow [Gateway API routing and cutover](../../../../docs/gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.

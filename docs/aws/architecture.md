@@ -23,7 +23,7 @@ Both infrastructure targets below belong to the same `infra` repository:
 
 There are two ownership boundaries within AWS as well. Argo CD manages the
 application's Kubernetes resources. The **AWS Load Balancer Controller** watches
-its Ingress and creates the ALB and target groups. Terraform supplies the ALB's
+its Gateway and creates the ALB and target groups. Terraform supplies the ALB's
 frontend security group and later references the ALB for CloudFront; it does not
 also manage that controller-created ALB.
 
@@ -44,7 +44,7 @@ flowchart TD
     App --> Render[Combine shared base and AWS overlay]
     Render --> Sync[Operator starts a full app sync]
     Sync --> Resources[Kubernetes app resources]
-    Resources --> Controller[AWS Load Balancer Controller watches Ingress]
+    Resources --> Controller[AWS Load Balancer Controller watches Gateway and HTTPRoute]
     Controller --> ALB[Internal ALB and target groups]
 ```
 
@@ -81,7 +81,7 @@ migration Job.
 | --- | --- |
 | Deployment | Runs one API replica on port `8000`, with health probes, resource limits and a non-root container security context |
 | ClusterIP Service | Gives the API a stable in-cluster endpoint on port `80`, selecting Pods by their labels |
-| Ingress | Declares routing to that Service and asks the ALB controller for an internal ALB with Pod IP targets |
+| Gateway and HTTPRoute | Declares routing to that Service and asks the ALB controller for an internal ALB with Pod IP targets |
 | Migration Job | Runs `python -m alembic upgrade head` from the same release image as the API |
 | App ConfigMap | Supplies the non-secret `APP_MESSAGE` setting |
 | Generated CA ConfigMap | Mounts the committed public RDS certificate bundle for verified database TLS; its content hash changes when the bundle changes |
@@ -97,7 +97,7 @@ Argo CD sync waves enforce this sequence during a full app sync:
 
 1. **Wave 0:** apply ConfigMaps and Service, and run the migration hook against RDS.
 2. **Wave 1:** roll out the API Deployment after the migration succeeds.
-3. **Wave 2:** apply the Ingress after the Deployment becomes healthy.
+3. **Wave 2:** apply both AWS configurations, Gateway and HTTPRoute together after the Deployment becomes healthy.
 
 The migration is a `Sync` hook, so it runs on later full syncs too. The previous
 Job is replaced before the next hook run. A failed migration blocks the rollout;
@@ -120,8 +120,8 @@ flowchart LR
     Pod -->|Verified TLS: port 5432| DB[Private RDS PostgreSQL]
 ```
 
-The Ingress references the ClusterIP Service to identify the backend. Because
-the ALB uses `target-type: ip`, actual ALB traffic goes to registered Pod IPs on
+The HTTPRoute references the ClusterIP Service to identify the backend. Because
+the ALB uses TargetGroupConfiguration `targetType: ip`, actual ALB traffic goes to registered Pod IPs on
 port `8000`. The Service is also available for in-cluster access and operator
 port forwarding.
 
@@ -148,9 +148,9 @@ different purposes from Argo CD's configuration sync status.
 The first deployment has a dependency order:
 
 1. Apply `infra/environments/aws/dev/foundation` for network/EKS/RDS/controller IAM and
-   frontend SG/rules, then `terraform/platform` for the two Helm releases.
+   frontend SG/rules, then `terraform/platform` for the controller, CRD and GatewayClass Helm releases.
 2. Provision Git access, the app database login/connection Secret and the GHCR
-   pull Secret. Set the Ingress security-group ID from the infrastructure output.
+   pull Secret. Set the LoadBalancerConfiguration security-group ID from the infrastructure output.
 3. Validate and publish the manifests, bootstrap the registration, then
    review and manually sync the entire app.
 4. Wait for the internal ALB and healthy targets, then provision its CloudFront
@@ -158,7 +158,7 @@ The first deployment has a dependency order:
 5. Verify the public endpoint, authentication and access-log delivery.
 
 CloudFront comes after the app sync because its VPC origin references the ALB
-created from the app's Ingress. The complete commands are in
+created from the app's Gateway. The complete commands are in
 [deploy from scratch](deploy-from-scratch.md).
 
 For a later release, publish a new image from the application repository, update
@@ -198,3 +198,7 @@ backup/log retention choices.
 
 For day-to-day navigation, use [setup](setup.md), [credentials](credentials.md)
 and [validation](validation.md).
+
+Follow [Gateway API routing and cutover](../gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.

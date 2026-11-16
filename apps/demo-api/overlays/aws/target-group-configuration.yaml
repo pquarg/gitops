@@ -1,0 +1,19 @@
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: demo-api
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  targetReference:
+    group: ""
+    kind: Service
+    name: demo-api
+  defaultConfiguration:
+    targetType: ip
+    protocol: HTTP
+    healthCheckConfig:
+      healthCheckPath: /ready
+      healthCheckProtocol: HTTP
+      matcher:
+        httpCode: "200"

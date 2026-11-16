@@ -5,7 +5,8 @@ and Gateway `traefik/traefik-gateway`. Traefik retains NodePort 30080 and the ki
 mapping `127.0.0.1:80`. HTTPRoutes belong to the app overlays in this repository.
 Only namespaces `demo-api` and `job-tracker` may attach; new apps require a
 reviewed infrastructure namespace-selector update. Same-namespace backends need
-no ReferenceGrant. AWS routing is unchanged by these local cutover commits.
+no ReferenceGrant. The local cutover commits retained AWS routing. A separate configuration-only
+commit subsequently prepares AWS Gateway routing for its first deployment.
 
 A distinct-host smoke route was published and verified first. Demo-api and
 Mailpit were converted and verified before job-tracker. The smoke route was
@@ -26,8 +27,8 @@ HTTPRoutes name parent namespace `traefik` and listener `web`. Requests retain
 their full path. `/api/` and nested API paths select the API. An Exact `/api`
 rule preserves the previous frontend fallback despite Gateway prefix matching
 also matching that bare path. `/apix` selects the frontend. Local bootstrap checks Gateway readiness rather
-than depending on an IngressClass. AWS bootstrap retains its existing checks
-until the separate AWS configuration conversion is published.
+than depending on an IngressClass. AWS bootstrap separately checks its CRDs/GatewayClass, without requiring an
+app-owned Gateway before app sync.
 
 ## Verify after publishing and syncing
 

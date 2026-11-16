@@ -58,7 +58,7 @@ for env in local aws; do
   context=selected; bootstrap_file=aws.yaml; platform=aws-load-balancer-controller
   if [[ "$env" == local ]]; then context=kind-selected; bootstrap_file=local.yaml; platform=traefik; fi
   for scenario in success existing-bootstrap unprefixed-app validation controller class unaccepted unresolved stale wrong-bootstrap bootstrap-without-path legacy-root legacy-local-set legacy-aws-set legacy-local-app legacy-aws-app legacy-query-error previous-app; do
-    if [[ "$env" == aws && ( "$scenario" == unaccepted || "$scenario" == unresolved || "$scenario" == stale ) ]]; then continue; fi
+    if [[ "$env:$scenario" == aws:unresolved ]]; then continue; fi
     run "$scenario" --environment "$env" --context "$context" --kubeconfig '/tmp/selected config'
     if [[ "$scenario" == success || "$scenario" == existing-bootstrap || "$scenario" == unprefixed-app ]]; then
       [[ "$result" == 0 ]] || fail "$env success"

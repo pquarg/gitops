@@ -43,7 +43,22 @@ for env in ('local', 'aws'):
         assert mail['rules'] == [{'matches': [{'path': {'type': 'PathPrefix', 'value': '/'}}], 'backendRefs': [{'name': 'demo-api-mailpit', 'port': 8025}]}]
         assert ('HTTPRoute', 'demo-api-gateway-smoke') not in resources
     else:
-        assert resources['Ingress', 'demo-api']['spec']['ingressClassName'] == 'alb'
+        assert not any(kind == 'Ingress' for kind, _ in resources)
+        route = resources['HTTPRoute', 'demo-api']
+        assert route['spec'] == {'parentRefs': [{'name': 'demo-api', 'sectionName': 'web'}], 'rules': [{'matches': [{'path': {'type': 'PathPrefix', 'value': '/'}}], 'backendRefs': [{'name': 'demo-api', 'port': 80}]}]}
+        gateway = resources['Gateway', 'demo-api']
+        assert gateway['spec']['gatewayClassName'] == 'alb'
+        assert gateway['spec']['infrastructure']['parametersRef'] == {'group': 'gateway.k8s.aws', 'kind': 'LoadBalancerConfiguration', 'name': 'demo-api'}
+        assert gateway['spec']['listeners'] == [{'name': 'web', 'port': 80, 'protocol': 'HTTP', 'allowedRoutes': {'namespaces': {'from': 'Same'}, 'kinds': [{'group': 'gateway.networking.k8s.io', 'kind': 'HTTPRoute'}]}}]
+        lb = resources['LoadBalancerConfiguration', 'demo-api']
+        assert {k: lb['spec'][k] for k in ('loadBalancerName', 'scheme', 'ipAddressType', 'manageBackendSecurityGroupRules')} == {'loadBalancerName': 'dev-demo-api', 'scheme': 'internal', 'ipAddressType': 'ipv4', 'manageBackendSecurityGroupRules': True}
+        assert len(lb['spec']['securityGroups']) == 1
+        tg = resources['TargetGroupConfiguration', 'demo-api']
+        assert tg['spec']['targetReference'] == {'group': '', 'kind': 'Service', 'name': 'demo-api'}
+        assert tg['spec']['defaultConfiguration'] == {'targetType': 'ip', 'protocol': 'HTTP', 'healthCheckConfig': {'healthCheckPath': '/ready', 'healthCheckProtocol': 'HTTP', 'matcher': {'httpCode': '200'}}}
+        for resource in (gateway, route, lb, tg):
+            assert resource['metadata']['annotations']['argocd.argoproj.io/sync-wave'] == '2'
+
     if env == 'local':
         assert not any(kind in ('PersistentVolume', 'PersistentVolumeClaim', 'StatefulSet') for kind, name in resources), 'Local app sync must not provision database/storage'
         assert ('Service', 'myfastapiapp-postgres-service') not in resources

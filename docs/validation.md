@@ -48,8 +48,9 @@ webhooks must support/reach the dry-run. Local selection requires a kind context
 AWS selection rejects kind contexts, and bootstrap additionally checks the matching
 platform routing controller before registering anything. Local checks include
 Standard CRDs, GatewayClass acceptance and shared Gateway/listener readiness;
-AWS retains its existing IngressClass prerequisite. HTTPRoutes use the pinned
-Gateway API v1.6.2 schema under `schemas/`.
+AWS checks its Gateway CRDs and GatewayClass before app sync; it does not
+require the app-owned Gateway to exist before registration. HTTPRoutes and AWS custom resources use schemas pinned to Gateway API v1.6.2
+and AWS controller v3.6.2 under `schemas/`.
 
 Configuration validation cannot prove image availability, Secret presence,
 database compatibility, successful migrations, cluster health or endpoint health.

@@ -36,7 +36,7 @@ project's plan before provisioning.
 
 `infra/environments/aws/dev` must already have installed Argo CD, its ApplicationSet controller, and
 the AWS Load Balancer Controller. This repository does not install those again.
-The bootstrap script validates before registration and checks their rollouts and the `alb` IngressClass.
+The bootstrap script validates before registration and checks their rollouts and the `alb` GatewayClass.
 
 Keep the Argo CD UI private and access it through a port forward:
 
@@ -53,7 +53,7 @@ enabled and provision the private key outside Git. See
 
 ## 3. Configure the app
 
-Check the frontend security-group ID in `apps/demo-api/overlays/aws/ingress.yaml` against
+Check the frontend security-group ID in `apps/demo-api/overlays/aws/load-balancer-configuration.yaml` against
 `terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group`. Its scheme must
 remain `internal`, with the HTTP port 80 listener and controller-managed backend
 rules. No custom hostname or ACM certificate is needed for this origin.
@@ -101,3 +101,7 @@ be retained before destroying resources.
 
 The common entry point accepts `--kubeconfig /absolute/file` and requires an
 explicit context. All Kubernetes commands use the selected file/context consistently.
+
+Follow [Gateway API routing and cutover](../gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.
