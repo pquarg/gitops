@@ -77,7 +77,7 @@ Follow the [app runbook](../../apps/demo-api/overlays/aws/README.md) and
 - `registry-credentials` for the selected published GHCR image. Preserve the
   existing release tag and worker architecture; publish a new image in the app repo
   for a new release rather than changing infrastructure pins.
-- The frontend SG annotation in `apps/demo-api/overlays/aws/ingress.yaml`, using foundation's
+- The LoadBalancerConfiguration security-group list in `apps/demo-api/overlays/aws/load-balancer-configuration.yaml`, using foundation's
   `myfastapiapp_alb_security_group` output. Keep ALB name `dev-demo-api`,
   internal IPv4 scheme, HTTP listener, IP targets and `/ready` checks unchanged.
 
@@ -94,7 +94,7 @@ git diff --check
 ./scripts/bootstrap.sh --environment aws --context "$EKS_CONTEXT"
 ```
 
-The bootstrap validates first, verifies CRDs/controllers/IngressClass and applies
+The bootstrap validates first, verifies CRDs/controllers/GatewayClass and applies
 only the `bootstrap` registration. Bootstrap Synced confirms registration, not app health or
 migration success. App `demo-api` remains **manually synced**. Perform a
 full sync with Force/Replace off so its migration hook runs; verify logs, Alembic
@@ -134,3 +134,7 @@ one stage apply does not update the other. Do not reuse consumed plans.
 For removal, use [teardown](teardown.md). Preserve edge → app ALB cleanup while
 its controller runs → platform → foundation → optional backend order. Each repo
 keeps its own commits; there is no shared root state or repository.
+
+Follow [Gateway API routing and cutover](../gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.

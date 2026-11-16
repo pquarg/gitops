@@ -76,13 +76,13 @@ app cleanup; do not remove the frontend SG first. Verify using actual recorded I
 ## 4. Pause GitOps and let the controller remove ALBs
 
 Record/pause bootstrap and app reconciliation. Let active operations complete. Remove
-app Ingresses through a reviewed Git change and explicit full app sync/prune, or
-pause both Argo CD reconcilers and remove their live Ingresses deliberately. Do
-not let a parent ApplicationSet/bootstrap recreate a removed Ingress. Inspect any
+app Gateways through a reviewed Git change and explicit full app sync/prune, or
+pause both Argo CD reconcilers and remove their live Gateways deliberately. Do
+not let a parent ApplicationSet/bootstrap recreate a removed Gateway. Inspect any
 Application finalizers; do not cascade-delete the app/database by accident.
 
 Keep `aws-load-balancer-controller` and its Pod Identity association/role/agent
-running. Verify its rollout, delete the Ingress, then wait for Kubernetes
+running. Verify its rollout, delete the Gateway, then wait for Kubernetes
 finalizers and AWS ALBs/target groups to disappear. Check target/network interfaces
 and controller backend groups. Investigate unrelated references rather than
 revoking arbitrary rules. Do not destroy platform while ALB cleanup is pending.
@@ -97,7 +97,7 @@ terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/platform" show remove-plat
 terraform -chdir="$TEARDOWN_COPY/environments/aws/dev/platform" apply remove-platform.tfplan
 ```
 
-Only the two Helm releases should be deleted. The EKS API/workers and controller
+Only the controller, CRD and GatewayClass Helm releases should be deleted. The EKS API/workers and controller
 AWS prerequisites remain until foundation is removed. Inspect failed Helm uninstalls
 before continuing. Kubernetes registrations/Secrets disappear with the cluster;
 keep original credentials in the private recovery set.
@@ -141,3 +141,7 @@ order. Re-import retained log bindings before normal edge applies, after validat
 provider IDs. A DB restore and its original app credentials require a deliberate
 recovery procedure; a Git revert or blank new instance cannot restore data.
 See [deploy from scratch](deploy-from-scratch.md) and the app runbook.
+
+Follow [Gateway API routing and cutover](../gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.

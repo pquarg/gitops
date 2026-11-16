@@ -4,7 +4,7 @@ namespace: job-tracker
 resources:
   - ../../base
   - configmap.yaml
-  - ingress.yaml
+  - httproute.yaml
 images:
   - name: ghcr.io/pquarg/job-tracker-backend
     newTag: 0.1.0-m4.4

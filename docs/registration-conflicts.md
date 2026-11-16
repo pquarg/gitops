@@ -15,7 +15,7 @@ read-only checks, replacing `CONTEXT` with that context:
 kubectl --context CONTEXT -n argocd get applications,applicationsets
 kubectl --context CONTEXT -n argocd get application bootstrap -o yaml
 kubectl --context CONTEXT -n argocd get applicationset apps -o yaml
-kubectl --context CONTEXT -n demo-api get deployments,jobs,services,ingresses
+kubectl --context CONTEXT -n demo-api get deployments,jobs,services,ingresses,gateways,httproutes
 ```
 
 An absent registration is expected before first setup. For existing objects,

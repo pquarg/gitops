@@ -15,10 +15,10 @@ origin-facing prefix list, app/check traffic to worker port 8000. Read:
 terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group
 ```
 
-Keep that identity in the app Ingress. The controller owns its backend group,
+Keep that identity in the app LoadBalancerConfiguration. The controller owns its backend group,
 ALB and targets. Terraform must never import those resources.
 
-## 2. Prepare and publish the internal Ingress
+## 2. Prepare and publish the internal Gateway
 
 Keep deterministic name `dev-demo-api`, internal IPv4 scheme,
 HTTP port 80, IP targets, `/ready` health check, controller backend-rule management
@@ -82,3 +82,7 @@ If the ISP/VPN changes the outbound IPv4, update the single ignored allowlist,
 review and apply fresh **foundation and edge** plans. Applying one stage alone
 does not update both restrictions. Keep AWS CLI access for recovery. Do not
 reuse consumed plans. Check the deployed outputs and endpoints directly.
+
+Follow [Gateway API routing and cutover](../gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.

@@ -29,7 +29,7 @@ Installing Argo CD does not create those files or start PostgreSQL.
 The platform must provide:
 
 - Argo CD in namespace `argocd`, with Application and ApplicationSet CRDs ready.
-- Shared Traefik in namespace `traefik` and IngressClass `traefik`.
+- Shared Traefik in namespace `traefik`, GatewayClass `traefik` and Gateway `traefik/traefik-gateway`.
 - `127.0.0.1:80` mapped to Traefik's NodePort `30080`.
 - A running separate PostgreSQL database reachable from kind Pods at
   `host.docker.internal:5433` using the restricted app login (Docker Desktop).
@@ -100,7 +100,7 @@ checkout. With the platform and credentials ready:
 kubectl --context kind-deployment -n argocd get applications
 ```
 
-The script validates first, checks the Argo CD controllers and shared ingress, then applies only
+The script validates first, checks the Argo CD controllers and shared Gateway, then applies only
 `bootstrap`. The bootstrap Application manages the ApplicationSet in `argocd/local/kustomization.yaml`.
 It discovers every `apps/*/overlays/local` entry point and creates an independent Application,
 including `demo-api` in namespace `demo-api`. Each app runs
@@ -124,3 +124,7 @@ verify existing records and login afterward.
 The common entry point also accepts `--kubeconfig /absolute/path`. It requires an
 explicit context and uses the same file/context for every Kubernetes command.
 Shared Traefik is a Terraform Helm release; Argo CD reconciles application resources.
+
+Follow [Gateway API routing and cutover](../gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.

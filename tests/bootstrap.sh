@@ -4,7 +4,8 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/repo/scripts"
-cp "$root/scripts/bootstrap.sh" "$tmp/repo/scripts/"
+cp "$root/scripts/bootstrap.sh" "$root/scripts/check-gateway.py" "$tmp/repo/scripts/"
+export GATEWAY_FIXTURE="$root/tests/gateway-status.py"
 cat > "$tmp/repo/scripts/validate.sh" <<'FAKE'
 #!/usr/bin/env bash
 printf 'validate %s\n' "$*" >> "$LOG"
@@ -16,8 +17,6 @@ printf 'kubectl' >> "$LOG"
 printf ' <%s>' "$@" >> "$LOG"
 printf '\n' >> "$LOG"
 if [[ "$*" == *'rollout status'* && "$CASE" == controller ]]; then exit 42; fi
-if [[ "$*" == *'get ingressclass traefik'* && "$CASE" != class ]]; then echo traefik.io/ingress-controller; fi
-if [[ "$*" == *'get ingressclass alb'* && "$CASE" != class ]]; then echo ingress.k8s.aws/alb; fi
 if [[ "$*" == *'get application bootstrap '* ]]; then
   if [[ "$CASE" == wrong-bootstrap ]]; then echo bootstrap:argocd/other; fi
   if [[ "$CASE" == bootstrap-without-path ]]; then echo bootstrap:; fi
@@ -40,6 +39,9 @@ case "$*" in
     if [[ "$CASE" == previous-app ]]; then echo myfastapiapp:apps/myfastapiapp/overlays/local; fi
     if [[ "$CASE" == unprefixed-app ]]; then echo aws-billing:apps/aws-billing/overlays/aws; fi ;;
 esac
+if [[ "$*" == *'get gatewayclass '* || "$*" == *'get gateway '* ]]; then
+  python3 "$GATEWAY_FIXTURE" "$@"
+fi
 # Fake read commands succeed even when no resource is found.
 exit 0
 FAKE
@@ -53,7 +55,8 @@ run() {
 for env in local aws; do
   context=selected; bootstrap_file=aws.yaml; platform=aws-load-balancer-controller
   if [[ "$env" == local ]]; then context=kind-selected; bootstrap_file=local.yaml; platform=traefik; fi
-  for scenario in success existing-bootstrap unprefixed-app validation controller class wrong-bootstrap bootstrap-without-path legacy-root legacy-local-set legacy-aws-set legacy-local-app legacy-aws-app legacy-query-error previous-app; do
+  for scenario in success existing-bootstrap unprefixed-app validation controller class unaccepted unresolved stale wrong-bootstrap bootstrap-without-path legacy-root legacy-local-set legacy-aws-set legacy-local-app legacy-aws-app legacy-query-error previous-app; do
+    if [[ "$env:$scenario" == aws:unresolved ]]; then continue; fi
     run "$scenario" --environment "$env" --context "$context" --kubeconfig '/tmp/selected config'
     if [[ "$scenario" == success || "$scenario" == existing-bootstrap || "$scenario" == unprefixed-app ]]; then
       [[ "$result" == 0 ]] || fail "$env success"

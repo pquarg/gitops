@@ -129,3 +129,7 @@ files as well as backups: source Git cannot recover them.
 After kind replacement, PostgreSQL remains in its existing external volume.
 Recreate the namespace/private Secrets, load both exact images, run the Pod probe,
 then allow registration/full sync. No database mount belongs in the cluster.
+
+Follow [Gateway API routing and cutover](../../../../docs/gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.

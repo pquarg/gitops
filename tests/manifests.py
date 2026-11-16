@@ -29,8 +29,29 @@ for env in ('local', 'aws'):
     job_image = migration['spec']['template']['spec']['containers'][0]['image']
     assert api_image == job_image, f'{env}: API and migration must use the same release'
     assert migration['metadata']['annotations']['argocd.argoproj.io/hook'] == 'Sync'
-    ingress = resources['Ingress', 'demo-api']
-    assert ingress['spec']['ingressClassName'] == ('traefik' if env == 'local' else 'alb')
+    assert not any(kind == 'Ingress' for kind, _ in resources)
+    route = resources['HTTPRoute', 'demo-api']['spec']
+    assert route['parentRefs'] == ([{'name': 'traefik-gateway', 'namespace': 'traefik', 'sectionName': 'web'}] if env == 'local' else [{'name': 'demo-api', 'sectionName': 'web'}])
+    assert route.get('hostnames') == (['demo-api.localhost'] if env == 'local' else None)
+    assert route['rules'] == [{'matches': [{'path': {'type': 'PathPrefix', 'value': '/'}}], 'backendRefs': [{'name': 'demo-api', 'port': 80}]}]
+    if env == 'aws':
+        gateway = resources['Gateway', 'demo-api']
+        assert gateway['spec']['gatewayClassName'] == 'alb'
+        assert gateway['spec']['infrastructure']['parametersRef'] == {'group': 'gateway.k8s.aws', 'kind': 'LoadBalancerConfiguration', 'name': 'demo-api'}
+        assert gateway['spec']['listeners'] == [{'name': 'web', 'port': 80, 'protocol': 'HTTP', 'allowedRoutes': {'namespaces': {'from': 'Same'}, 'kinds': [{'group': 'gateway.networking.k8s.io', 'kind': 'HTTPRoute'}]}}]
+        lb = resources['LoadBalancerConfiguration', 'demo-api']
+        assert {k: lb['spec'][k] for k in ('loadBalancerName', 'scheme', 'ipAddressType', 'manageBackendSecurityGroupRules')} == {'loadBalancerName': 'dev-demo-api', 'scheme': 'internal', 'ipAddressType': 'ipv4', 'manageBackendSecurityGroupRules': True}
+        assert len(lb['spec']['securityGroups']) == 1
+        tg = resources['TargetGroupConfiguration', 'demo-api']
+        assert tg['spec']['targetReference'] == {'group': '', 'kind': 'Service', 'name': 'demo-api'}
+        assert tg['spec']['defaultConfiguration'] == {'targetType': 'ip', 'protocol': 'HTTP', 'healthCheckConfig': {'healthCheckPath': '/ready', 'healthCheckProtocol': 'HTTP', 'matcher': {'httpCode': '200'}}}
+        for resource in (gateway, lb, tg, resources['HTTPRoute', 'demo-api']):
+            assert resource['metadata']['annotations']['argocd.argoproj.io/sync-wave'] == '2'
+    else:
+        mail = resources['HTTPRoute', 'demo-api-mailpit']['spec']
+        assert mail['hostnames'] == ['mailpit.localhost']
+        assert mail['parentRefs'] == route['parentRefs']
+        assert mail['rules'][0]['backendRefs'] == [{'name': 'demo-api-mailpit', 'port': 8025}]
     if env == 'local':
         assert not any(kind in ('PersistentVolume', 'PersistentVolumeClaim', 'StatefulSet') for kind, name in resources), 'Local app sync must not provision database/storage'
         assert ('Service', 'myfastapiapp-postgres-service') not in resources
@@ -93,10 +114,13 @@ for component in ('api', 'worker', 'frontend'):
         assert {'secretRef': {'name': 'job-tracker-secrets'}} in container['envFrom']
     if component != 'worker':
         assert pod['securityContext']['seccompProfile']['type'] == 'RuntimeDefault'
-route = tracker['Ingress', 'job-tracker']['spec']['rules'][0]
-assert route['host'] == 'job-tracker.localhost'
-paths = {p['path']: p['backend']['service']['name'] for p in route['http']['paths']}
-assert paths == {'/api/': 'job-tracker-api', '/': 'job-tracker-frontend'}
+route = tracker['HTTPRoute', 'job-tracker']['spec']
+assert route['hostnames'] == ['job-tracker.localhost']
+assert route['parentRefs'] == [{'name': 'traefik-gateway', 'namespace': 'traefik', 'sectionName': 'web'}]
+assert route['rules'] == [
+    {'matches': [{'path': {'type': 'PathPrefix', 'value': path}}], 'backendRefs': [{'name': service, 'port': 80}]}
+    for path, service in [('/api/', 'job-tracker-api'), ('/', 'job-tracker-frontend')]]
+assert not any(kind == 'Ingress' for kind, _ in tracker)
 assert not (ROOT / 'apps/job-tracker/overlays/aws').exists(), 'Tracker release is local only'
 print('Tracker release ordering, ownership, routing and container boundaries passed.')
 

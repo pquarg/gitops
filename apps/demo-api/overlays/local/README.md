@@ -20,7 +20,7 @@ provisioned by `infra/environments/local`.
 The local and AWS overlays use the same API Deployment and migration Job. Both
 connect to an already provisioned external PostgreSQL database through
 `demo-api-secrets`. Local uses a separate Compose container; AWS uses RDS.
-The local overlay contains app configuration and Traefik ingress, with no
+The local overlay contains app configuration and Traefik Gateway routing, with no
 PostgreSQL workload or storage in the app sync.
 
 The local overlay also deploys a pinned Mailpit test inbox in namespace
@@ -60,7 +60,7 @@ A `202` acknowledges the request, not delivery. `503` means the API did not load
 SMTP settings; confirm the selected Git revision and completed API rollout.
 
 The inbox is unauthenticated and contains reset credentials, so use test
-accounts. Its web route uses the existing local Traefik ingress and kind's
+accounts. Its web route uses the existing local Traefik Gateway routing and kind's
 loopback host binding. SMTP has only a ClusterIP Service, without a host port or
 public ingress. There is no persistent volume: captured mail is discarded when
 the Pod is replaced. Storage is limited to 128 MiB and the oldest messages are
@@ -323,7 +323,7 @@ ignored Secret needs no commit or push; manifest changes must be published.
    before pushing. For other changes, commit and push, then wait for Argo CD to sync.
 
 Use a new image tag for each code release. Manifest-only edits, such as resource
-settings, replicas, and Ingress rules, need only a deployment-repository commit.
+settings, replicas, and HTTPRoute rules, need only a deployment-repository commit.
 FastAPI keeps its app release version; PostgreSQL has its own image version in
 `infra/environments/local/database/compose.yaml` in the sibling repository. PostgreSQL is
 provisioned separately; app sync does not upgrade or restart it.
@@ -372,3 +372,7 @@ Database recovery is independent of cluster recreation. Follow
 [backup/restore](https://github.com/pquarg/infra/blob/main/environments/local/docs/database.md#backup-and-restore)
 and verify actual app behaviour before traffic. Password files only initialize
 empty storage; keep the passwords matching the existing database roles.
+
+Follow [Gateway API routing and cutover](../../../../docs/gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.

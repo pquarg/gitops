@@ -1,0 +1,13 @@
+apiVersion: gateway.k8s.aws/v1
+kind: LoadBalancerConfiguration
+metadata:
+  name: demo-api
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  loadBalancerName: dev-demo-api
+  scheme: internal
+  ipAddressType: ipv4
+  # Historical value only: replace with the NEW foundation output before sync.
+  securityGroups: [sg-0e84da2f851551dff]
+  manageBackendSecurityGroupRules: true

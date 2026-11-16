@@ -126,3 +126,7 @@ API against an existing database in both environments.
 
 Filled Secret files remain ignored and outside Kustomize. Keep database files,
 backups, credentials, Terraform state and saved plans outside version control.
+
+Follow [Gateway API routing and cutover](docs/gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.

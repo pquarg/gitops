@@ -6,15 +6,18 @@ Use a lowercase DNS label of at most 63 characters. Reserve `argocd`, `traefik`,
 
 Add `apps/<app>/overlays/local/kustomization.yaml` and/or
 `apps/<app>/overlays/aws/kustomization.yaml`. Each overlay includes `../../base`,
-selects its release image and adds the environment's configuration and ingress.
+selects its release image and adds the environment's configuration and HTTPRoutes.
 An app can opt into one or both environments; creating a base alone deploys nothing.
+Local Gateway attachment also requires its namespace in infra's allowed-route
+selector. Use demo-api's HTTPRoute parentRefs and a unique hostname. AWS overlays
+also need a same-namespace Gateway and both AWS configuration resources.
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
-  - ingress.yaml
+  - httproute.yaml
 images:
   - name: ghcr.io/pquarg/billing-api
     newTag: "0.1.0"
@@ -39,7 +42,7 @@ Use [demo-api's database setup](https://github.com/pquarg/infra/blob/main/enviro
 example.
 
 AWS databases and other cloud resources belong in `infra/environments/aws/dev`. The AWS overlay
-contains connection configuration, verified database TLS and an ALB Ingress.
+contains connection configuration, verified database TLS and an ALB Gateway and HTTPRoute.
 Use each app's own frontend security group and ALB name. Provision CloudFront after
 the controller creates a healthy ALB. Follow the [AWS infrastructure contract](aws/infrastructure.md).
 
@@ -56,3 +59,7 @@ Removing an overlay deletes its generated Application. Existing
 `preserveResourcesOnDeletion: true` keeps its resources, and pruning remains disabled.
 Retire workloads and cloud dependencies deliberately after backups; deleting a Git
 directory does not remove database data or guarantee load balancer cleanup.
+
+Follow [Gateway API routing and cutover](gateway-api.md) for route status checks,
+publication order, CRD prerequisites and recovery. Local controller support must
+be applied before publishing HTTPRoutes. AWS app sync remains manual.
