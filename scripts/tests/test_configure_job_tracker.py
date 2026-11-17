@@ -13,6 +13,31 @@ DATABASE = 'postgresql+psycopg://job_tracker:synthetic@host.docker.internal:5433
 
 
 class ConfigureTrackerTests(unittest.TestCase):
+    def test_plan_settings_require_stable_private_key_host_and_loopback(self):
+        content = (f'JT_DATABASE_URL={DATABASE}\nJT_AI_AUTH=chatgpt_plan\n'
+                   'JT_CHATGPT_ENCRYPTION_KEY=' + base64.urlsafe_b64encode(b'x' * 32).decode() + '\n'
+                   'JT_CHATGPT_HOST_ID=urn:uuid:11111111-1111-4111-8111-111111111111\n'
+                   'JT_CHATGPT_CALLBACK_URI=http://127.0.0.1:1456/auth/callback\n')
+        for replacement, valid in [('', True), ('bad-key', False), ('bad-host', False), ('bad-callback', False)]:
+            with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'deployment.env'
+                value = content
+                if replacement == 'bad-key':
+                    value = value.replace(base64.urlsafe_b64encode(b'x' * 32).decode(), 'invalid')
+                if replacement == 'bad-host':
+                    value = value.replace('urn:uuid:11111111-1111-4111-8111-111111111111', 'email@example.test')
+                if replacement == 'bad-callback':
+                    value = value.replace('127.0.0.1:1456', 'external.example.test:1456')
+                path.write_text(value)
+                path.chmod(0o600)
+                with patch.object(helper.subprocess, 'run') as run:
+                    run.return_value.returncode = 1
+                    if valid:
+                        self.assertEqual(helper.read_settings(path)['JT_AI_AUTH'], 'chatgpt_plan')
+                    else:
+                        with self.assertRaises(ValueError):
+                            helper.read_settings(path)
+
     def test_private_env_is_parsed_without_executing_shell(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'deployment.env'

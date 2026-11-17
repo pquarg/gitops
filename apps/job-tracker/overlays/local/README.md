@@ -14,9 +14,9 @@ FastAPI and `/` to the static frontend; demo-api and Mailpit keep their routes.
    in [kustomization.yaml](kustomization.yaml), then load into the existing cluster:
 
    ```sh
-   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.4 ../apps/job-tracker/backend
-   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.2 ../apps/job-tracker/frontend
-   kind load docker-image ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.4 ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.2 --name deployment
+   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.5 ../apps/job-tracker/backend
+   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.3 ../apps/job-tracker/frontend
+   kind load docker-image ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.5 ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.3 --name deployment
    ```
 
    These are local loaded releases, not published GHCR packages. Use a new tag
@@ -39,26 +39,31 @@ FastAPI and `/` to the static frontend; demo-api and Mailpit keep their routes.
    privileges and transactional DDL, and actually parses text in bubblewrap.
    It creates and deletes only its temporary probe Job. Continue only when it
    reports all checks passed. Filled Secrets stay outside Kustomize and Git.
-4. OpenAI is the only AI/search provider. In the private deployment env file set
-   `OPENAI_API_KEY` to your project key; `JT_AI_PROVIDER=openai` and
-   `JT_AI_MODEL=gpt-6-astra` are the current configurable defaults. Review the
-   app's [processing and budget disclosure](https://github.com/pquarg/job-tracker/blob/main/docs/openai-provider.md).
-   No Brave account/key or Ollama endpoint is required. The standard disclosure
-   describes API retention; `store=false` is not a zero-retention guarantee.
-   An optional `JT_AI_RETENTION` override must match verified account terms.
+4. This release selects per-user ChatGPT plan authentication. Preserve the existing
+   private deployment env file and database URL. From the app checkout run:
+
+   ```sh
+   python3 scripts/prepare-chatgpt.py --env-file /absolute/private/job-tracker/deployment.env
+   ```
+
+   This creates the encryption key and stable host ID once and retains a private
+   copy of previous settings. Keep the pair for installation recovery; do not
+   regenerate it during upgrades. Follow the app's
+   [ChatGPT connection runbook](https://github.com/pquarg/job-tracker/blob/main/docs/chatgpt-plan.md).
+   For this additive schema release, first pause auto-sync and **both** writers,
+   then take/verify a backup as described below. With writers stopped:
 
    ```sh
    ./scripts/configure-job-tracker.py --environment local --context kind-deployment --env-file /absolute/private/job-tracker/deployment.env
    ```
 
-   The mode-600 env file must be outside Git and contain the dedicated local
-   `JT_DATABASE_URL`. It may also hold the origin/cookie/model/provider settings
-   shown in the app environment example. The helper does not execute shell
-   expressions or print values. It removes retired Ollama/Brave Secret fields,
-   preserves unrelated entries and updates only `job-tracker-secrets`. Empty
-   `OPENAI_API_KEY` keeps manual review available and research disabled. Never
-   put keys in ConfigMaps or frontend variables. Restart API/worker after any
-   private settings update, then approve the renewed disclosure in each account.
+   The mode-600 env file must be outside Git. The helper validates the private
+   key/host pair and loopback callback, preserves unrelated Secret fields and
+   never executes shell expressions or prints values. No API key is needed in
+   plan mode, and a filled key is never used as fallback. Without a connected
+   account, selected model and approved disclosure, manual review remains available.
+   Existing API-key installations can explicitly select `JT_AI_AUTH=api_key` in
+   the Secret; then `OPENAI_API_KEY` and `JT_AI_MODEL` control that mode.
 5. Run `./scripts/validate.sh --no-placeholders`,
    `./scripts/validate-server.sh job-tracker --environment local --context kind-deployment`
    and `git diff --check`. Review, commit and push the overlay only after these
@@ -100,6 +105,18 @@ bounded discovery and save a decision/notes, then repeat after restart. Missing
 providers mean that live discovery remains unverified, even when Argo is healthy.
 Run independent backup/restore verification after creating test data.
 
+## Connect a user after rollout
+
+From the app checkout keep `python3 scripts/chatgpt-callback.py --environment local
+--context kind-deployment` running. This loopback-only tunnel handles no tokens
+and checks the backend callback before opening the tracker. The UI also checks
+readiness before sign-in. The callback must stay exactly HTTP `127.0.0.1` with
+path `/auth/callback`; the default local port is 1456. No public Gateway callback
+route is added. Users authorize, select an account-eligible model, review ChatGPT
+usage/credit controls and approve processing. The preview lacks hard output/token
+and hosted-tool caps. Usage exhaustion pauses durably until explicit Resume.
+Connection/model changes cancel pending AI work and require new consent.
+
 ## Releases, credentials and recovery
 
 For schema changes, pause this app's auto-sync, wait for active migration hooks,
@@ -123,7 +140,11 @@ Application rollback selects a previous compatible image; it does not undo
 migrations or restore deleted records. Recovery restores a verified backup into
 an empty tracker schema with writers stopped. Never automatically downgrade or
 clear a populated schema. Reconcile account deletions made since the backup
-before resuming workers. Keep private connection/provider settings and password
+before resuming workers. The infra tracker restore helper also clears restored
+ChatGPT credentials and pending authorizations, and invalidates AI approvals.
+Users reconnect and approve processing again; raw pg_restore alone does not do
+this. Back up the stable installation key/host separately from the encrypted DB.
+Keep private connection/provider settings and password
 files as well as backups: source Git cannot recover them.
 
 After kind replacement, PostgreSQL remains in its existing external volume.

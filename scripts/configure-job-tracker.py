@@ -7,9 +7,12 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
+import uuid
 
 ALLOWED = {'JT_DATABASE_URL', 'JT_ORIGIN', 'JT_COOKIE_SECURE', 'JT_AI_PROVIDER',
-           'JT_AI_MODEL', 'JT_AI_RETENTION', 'OPENAI_API_KEY'}
+           'JT_AI_MODEL', 'JT_AI_RETENTION', 'OPENAI_API_KEY', 'JT_AI_AUTH',
+           'JT_CHATGPT_ENCRYPTION_KEY', 'JT_CHATGPT_HOST_ID', 'JT_CHATGPT_CALLBACK_URI',
+           'JT_CHATGPT_RETENTION'}
 RETIRED = {'JT_AI_URL', 'JT_AI_EXTERNAL', 'JT_AI_KEY', 'JT_SEARCH_KEY', 'JT_SEARCH_RETENTION'}
 
 
@@ -36,6 +39,24 @@ def read_settings(path):
             raise ValueError('Settings must be single-line values')
     if values.get('JT_AI_PROVIDER', 'openai') != 'openai':
         raise ValueError('Only the OpenAI provider is supported')
+    mode = values.get('JT_AI_AUTH', 'api_key')
+    if mode not in {'api_key', 'chatgpt_plan'}:
+        raise ValueError('Choose api_key or chatgpt_plan authentication explicitly')
+    if mode == 'chatgpt_plan':
+        key = values.get('JT_CHATGPT_ENCRYPTION_KEY', '')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{43}=', key) or len(base64.urlsafe_b64decode(key)) != 32:
+            raise ValueError('Plan mode requires a private Fernet encryption key')
+        host = values.get('JT_CHATGPT_HOST_ID', '')
+        try:
+            identifier = uuid.UUID(host.removeprefix('urn:uuid:'))
+            if host != 'urn:uuid:' + str(identifier) or identifier.version != 4:
+                raise ValueError
+        except ValueError:
+            raise ValueError('Plan mode requires a stable opaque UUID host ID') from None
+        callback = values.get('JT_CHATGPT_CALLBACK_URI', 'http://127.0.0.1:1456/auth/callback')
+        match = re.fullmatch(r'http://127\.0\.0\.1:(\d{2,5})/auth/callback', callback)
+        if not match or not 1024 <= int(match[1]) <= 65535:
+            raise ValueError('Expected the documented loopback callback path and unprivileged port')
     database = values.get('JT_DATABASE_URL', '')
     if not re.fullmatch(r'postgresql\+psycopg://job_tracker:[^@\s]+@host\.docker\.internal:5433/job_tracker', database):
         raise ValueError('Expected the dedicated local tracker database/login and host route')
