@@ -5,6 +5,11 @@ Run from the GitOps checkout. This overlay is local only, uses context
 The app is at http://job-tracker.localhost. Traefik sends `/api/` unchanged to
 FastAPI and `/` to the static frontend; demo-api and Mailpit keep their routes.
 
+The Mantine release updates the UI and the dashboard query API together. It
+uses the existing database schema and provider settings. For an existing
+installation, build and load both images, run the database probe and validation,
+then publish and verify the release. Keep the existing namespace and Secret.
+
 ## Prepare before publication
 
 1. Follow [local setup](../../../../docs/local/setup.md) for the existing platform.
@@ -14,9 +19,9 @@ FastAPI and `/` to the static frontend; demo-api and Mailpit keep their routes.
    in [kustomization.yaml](kustomization.yaml), then load into the existing cluster:
 
    ```sh
-   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.5 ../apps/job-tracker/backend
-   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.3 ../apps/job-tracker/frontend
-   kind load docker-image ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.5 ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.3 --name deployment
+   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.6 ../apps/job-tracker/backend
+   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.4 ../apps/job-tracker/frontend
+   kind load docker-image ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.6 ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.4 --name deployment
    ```
 
    These are local loaded releases, not published GHCR packages. Use a new tag
@@ -159,7 +164,7 @@ This overlay uses HTTPRoute `job-tracker` attached to shared Gateway
 `job-tracker-api:80`; `/` selects `job-tracker-frontend:80`. Paths are preserved.
 An Exact `/api` rule preserves the previous frontend fallback; `/api/` and
 nested API paths select the API, while `/apix` selects the frontend.
-The full migration hook and release images are unchanged. After publishing,
+During a Gateway routing cutover,
 verify the new route's current-generation Accepted/ResolvedRefs status, then
 explicitly prune only the old job-tracker Ingress. Auto-sync does not prune it.
 
