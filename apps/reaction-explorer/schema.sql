@@ -1,7 +1,4 @@
 -- Run as warehouse against the dedicated deployment database before loading.
-\connect reaction_warehouse
-
-
 CREATE TABLE IF NOT EXISTS public.source_snapshot (
     checksum text PRIMARY KEY CHECK (checksum ~ '^[a-f0-9]{64}$'),
     source_url text NOT NULL,
