@@ -29,8 +29,8 @@ def main():
     parser.add_argument('--dashboard-password-file', required=True)
     args = parser.parse_args()
     app = args.app_dir.resolve()
-    if not (app / 'pipeline/dbt/profiles.yml').is_file():
-        parser.error('--app-dir must be the reaction-explorer source checkout')
+    if not (app / 'pipeline/models.py').is_file():
+        parser.error('--app-dir must be a reaction-explorer checkout with model publication support')
     env = dict(os.environ, WAREHOUSE_PORT='5433', DASHBOARD_DB_HOST='127.0.0.1',
                DBT_SCHEMA='analytics', WAREHOUSE_PASSWORD=password(args.password_file),
                DASHBOARD_PASSWORD=password(args.dashboard_password_file))
@@ -50,9 +50,7 @@ except psycopg.Error:
         ['./scripts/check-workbook.sh'],
         ['uv', 'run', '--locked', 'python', '-c', initialize, schema],
         ['uv', 'run', '--locked', 'python', '-m', 'pipeline.warehouse'],
-        ['uv', 'run', '--locked', 'dbt', 'build', '--project-dir', 'pipeline/dbt',
-         '--profiles-dir', 'pipeline/dbt'],
-        ['uv', 'run', '--locked', 'python', '-m', 'pipeline.check_comparisons'],
+        ['uv', 'run', '--locked', 'python', '-m', 'pipeline.models'],
         ['uv', 'run', '--locked', 'python', '-m', 'backend.check_dashboard'],
     ]
     for command in commands:

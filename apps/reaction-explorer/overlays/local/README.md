@@ -21,9 +21,10 @@ locally built/loaded image. The existing ApplicationSet discovers it from publis
 
    This explicitly targets the deployment warehouse on localhost:5433, initializes
    missing source tables, verifies/downloads the pinned workbook, loads it, builds
-   and tests dbt models, and checks 8,640 comparisons and original workbook rows.
+   and tests dbt models in an isolated schema, and checks 8,640 comparisons and
+   original workbook rows before publishing both models together.
    It never reads the development `.env`. Run only against this app's provisioned
-   deployment database. Failed dbt builds can leave old models; stop on failure.
+   deployment database. On failure the previous published models stay available.
    For existing data, take a verified backup before schema/data changes. There
    is no automatic downgrade or schema reset. Review schema changes as releases.
 3. Build the matched React/API image from app source, then load the exact tag:
