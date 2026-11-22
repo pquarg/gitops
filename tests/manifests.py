@@ -136,3 +136,20 @@ assert tracker_config['JT_AI_PROVIDER'] == 'openai'
 assert tracker_config['JT_AI_MODEL']
 assert not any('KEY' in key or 'SECRET' in key for key in tracker_config)
 print('Tracker OpenAI configuration keeps credentials out of rendered manifests.')
+
+reaction = render('apps/reaction-explorer/overlays/local')
+assert not any(kind in ('Secret', 'PersistentVolume', 'PersistentVolumeClaim', 'StatefulSet', 'Job') for kind, _ in reaction)
+web = reaction['Deployment', 'reaction-explorer']['spec']['template']['spec']
+assert web['automountServiceAccountToken'] is False
+assert web['securityContext']['runAsNonRoot'] is True
+container = web['containers'][0]
+assert container['image'] == 'ghcr.io/pquarg/reaction-explorer-web:0.1.0-local.1'
+assert container['readinessProbe']['httpGet']['path'] == '/api/snapshots'
+assert container['livenessProbe']['httpGet']['path'] == '/api/health'
+assert container['securityContext']['readOnlyRootFilesystem'] is True
+assert container['securityContext']['capabilities']['drop'] == ['ALL']
+assert container['envFrom'] == [{'configMapRef': {'name': 'reaction-explorer-config'}}, {'secretRef': {'name': 'reaction-explorer-secrets'}}]
+assert reaction['ConfigMap', 'reaction-explorer-config']['data']['WAREHOUSE_PORT'] == '5433'
+assert reaction['HTTPRoute', 'reaction-explorer']['spec']['hostnames'] == ['reaction-explorer.localhost']
+assert not (ROOT / 'apps/reaction-explorer/overlays/aws').exists()
+print('Reaction Explorer read-only workload, external database and local routing checks passed.')

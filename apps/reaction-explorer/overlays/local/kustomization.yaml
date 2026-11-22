@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: reaction-explorer
+resources:
+  - ../../base
+  - configmap.yaml
+  - httproute.yaml
+images:
+  - name: ghcr.io/pquarg/reaction-explorer-web
+    newTag: 0.1.0-local.1

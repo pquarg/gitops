@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reaction-explorer-config
+data:
+  DASHBOARD_DB_HOST: host.docker.internal
+  WAREHOUSE_PORT: "5433"
+  PYTHONDONTWRITEBYTECODE: "1"

@@ -5,8 +5,11 @@ Run from the GitOps checkout. This overlay is local only, uses context
 The app is at http://job-tracker.localhost. Traefik sends `/api/` unchanged to
 FastAPI and `/` to the static frontend; demo-api and Mailpit keep their routes.
 
-The Mantine release updates the UI and the dashboard query API together. It
-uses the existing database schema and provider settings. For an existing
+The CV/results release builds app source `f640279` into backend `0.1.0-m4.7`
+and frontend `0.1.0-m4.5`. It adds the compatible `role_favourites` column through
+migration `90f884ac1e62`, streamlines CV setup and results browsing, and preserves
+existing provider settings. Pause auto-sync and both writers, then take and verify
+a pre-migration backup before publishing. For an existing
 installation, build and load both images, run the database probe and validation,
 then publish and verify the release. Keep the existing namespace and Secret.
 
@@ -19,9 +22,9 @@ then publish and verify the release. Keep the existing namespace and Secret.
    in [kustomization.yaml](kustomization.yaml), then load into the existing cluster:
 
    ```sh
-   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.6 ../apps/job-tracker/backend
-   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.4 ../apps/job-tracker/frontend
-   kind load docker-image ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.6 ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.4 --name deployment
+   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.7 ../apps/job-tracker/backend
+   docker build --provenance=false -t ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.5 ../apps/job-tracker/frontend
+   kind load docker-image ghcr.io/pquarg/job-tracker-backend:0.1.0-m4.7 ghcr.io/pquarg/job-tracker-frontend:0.1.0-m4.5 --name deployment
    ```
 
    These are local loaded releases, not published GHCR packages. Use a new tag

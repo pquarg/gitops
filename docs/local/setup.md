@@ -125,3 +125,5 @@ verify existing records and login afterward.
 The common entry point also accepts `--kubeconfig /absolute/path`. It requires an
 explicit context and uses the same file/context for every Kubernetes command.
 Shared Traefik is a Terraform Helm release; Argo CD reconciles application resources.
+
+For Reaction Explorer, follow its [local release](../../apps/reaction-explorer/overlays/local/README.md) to prepare the deployment warehouse, load the React/API image and provision read-only credentials before publication.
