@@ -12,10 +12,9 @@ the independent [infrastructure repository](https://github.com/pquarg/infra/blob
 | Local | kind and shared Traefik | Separate Compose PostgreSQL | Automatic |
 | AWS | EKS, internal ALB and CloudFront | Private RDS with verified TLS | Manual |
 
-The project is a deployment learning lab. The AWS configuration restricts public
-access to operator IPs and uses one app replica and single-AZ RDS. See the
-[architecture guide](docs/aws/architecture.md) for request flow, resource
-ownership and migration order.
+The AWS configuration restricts public access to operator IPs and uses one app
+replica and single-AZ RDS. See the [architecture guide](docs/aws/architecture.md)
+for request flow, resource ownership and migration order.
 
 ## Get the companion repositories
 

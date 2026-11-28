@@ -103,7 +103,7 @@ rootless bubblewrap needs nested namespace syscalls; API, frontend and migration
 retain `RuntimeDefault`. No privileged container or host mount is used. The
 parser receives no DB/provider credentials, network or private filesystem mounts.
 The unused proc mount was removed to support nested container isolation. This
-exception is scoped to this local lab and needs review for any other platform.
+exception applies to the local deployment and needs review for any other platform.
 
 Create two **synthetic** browser accounts, select manual processing, upload text,
 PDF and DOCX, review/correct/approve evidence and save search profiles. Check the

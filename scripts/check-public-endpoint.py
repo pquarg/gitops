@@ -2,7 +2,7 @@
 """Check the public API; --auth creates one synthetic account and revokes its session.
 
 Passwords and bearer tokens stay in memory and are never printed or saved.
-The account remains in the learning database; its generated password is discarded.
+The account remains in the target database. Its generated password is discarded.
 Requires only Python 3. Redirects are inspected, never followed with credentials.
 """
 

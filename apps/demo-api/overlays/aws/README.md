@@ -93,8 +93,8 @@ release selection and pull credentials.
 ## First deployment
 
 Complete [cluster setup](../../../../docs/aws/setup.md) and ensure the RDS database and app
-role already exist. This learning deployment starts with a fresh database;
-these manifests do not copy local data.
+role already exist. The first AWS deployment starts with a fresh database.
+These manifests do not copy local data.
 
 Verify the frontend group configured in `load-balancer-configuration.yaml` matches
 `terraform -chdir=../infra/environments/aws/dev/foundation output myfastapiapp_alb_security_group`. The manifest
