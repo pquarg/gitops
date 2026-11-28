@@ -9,6 +9,7 @@ in Kubernetes; only the application's connection Secret is persisted.
 import argparse
 import base64
 import json
+import re
 from pathlib import Path
 import secrets
 import shutil
@@ -203,29 +204,43 @@ class Commands:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("context", help="Explicit EKS kubectl context")
-    parser.add_argument("--profile", default="aws-project")
+    parser.add_argument("--environment", choices=("aws", "prod"), default="aws")
+    parser.add_argument("--profile")
+    parser.add_argument("--account-id", help="Expected dedicated production AWS account")
     args = parser.parse_args()
     for executable in ("aws", "kubectl"):
         if not shutil.which(executable):
             parser.error(f"{executable} must be installed")
-    commands = Commands(args.context, args.profile)
+    if args.environment == "prod":
+        if not re.fullmatch(r"[0-9]{12}", args.account_id or "") or args.account_id == AWS_ACCOUNT_ID:
+            parser.error("--environment prod requires the dedicated production --account-id")
+        account = args.account_id
+        cluster_name = "deployment-project-prod"
+        profile = args.profile or "aws-project-prod"
+    else:
+        if args.account_id is not None:
+            parser.error("--account-id is only allowed for production")
+        account = AWS_ACCOUNT_ID
+        cluster_name = CLUSTER
+        profile = args.profile or "aws-project"
+    commands = Commands(args.context, profile)
     temporary = []
     try:
         identity = commands.aws_json("sts", "get-caller-identity")
-        if identity["Account"] != AWS_ACCOUNT_ID:
+        if identity["Account"] != account:
             raise RuntimeError("AWS profile targets a different AWS account; stopping.")
-        cluster = commands.aws_json("eks", "describe-cluster", "--name", CLUSTER)["cluster"]
+        cluster = commands.aws_json("eks", "describe-cluster", "--name", cluster_name)["cluster"]
         context = json.loads(commands.kube("config", "view", "--minify", "-o", "json"))
         if context["clusters"][0]["cluster"]["server"] != cluster["endpoint"]:
             raise RuntimeError("Kubectl context does not target this EKS cluster; stopping.")
         db = commands.aws_json(
-            "rds", "describe-db-instances", "--db-instance-identifier", DATABASE_ID
+            "rds", "describe-db-instances", "--db-instance-identifier", DATABASE_ID if args.environment == "aws" else f"{cluster_name}-postgres"
         )["DBInstances"][0]
         if (db["DBInstanceStatus"] != "available" or db["PubliclyAccessible"]
                 or db["DBName"] != DATABASE_NAME or db["Endpoint"]["Port"] != 5432):
             raise RuntimeError("Expected private, available application database; stopping.")
         host = db["Endpoint"]["Address"]
-        ca = (Path(__file__).resolve().parents[1] / "apps" / APP / "overlays" / "aws" / "certs"
+        ca = (Path(__file__).resolve().parents[1] / "apps" / APP / "rds-ca"
               / "global-bundle.pem").read_text()
         print("Verified AWS account, EKS context and private RDS instance.", flush=True)
 

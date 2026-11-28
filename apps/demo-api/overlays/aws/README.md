@@ -77,7 +77,7 @@ issue comments. The API and migration Job both use this same Kubernetes Secret.
 
 Both workloads set `PGSSLMODE=verify-full` and
 `PGSSLROOTCERT=/etc/rds-ca/global-bundle.pem`. Kustomize generates their public CA
-ConfigMap from `certs/global-bundle.pem`. Keep certificate verification enabled;
+ConfigMap from [the shared RDS CA bundle](../../rds-ca/README.md). Keep certificate verification enabled;
 check the RDS endpoint and CA bundle if verification fails.
 
 ```sh
@@ -108,7 +108,7 @@ public ALB listener, custom domain or ACM requirement for this initial setup.
 ./scripts/validate-server.sh demo-api --environment aws --context "$EKS_CONTEXT"
 ```
 
-Publish the checked configuration to `main` and bootstrap the bootstrap Application.
+Publish the checked configuration to `dev` and bootstrap the bootstrap Application.
 In Argo CD, review and sync the **entire** `demo-api` Application. A selective
 resource sync skips hooks and must not be used for an app release.
 
@@ -212,7 +212,7 @@ kubectl --context "$EKS_CONTEXT" -n demo-api \
 The next migration Job uses the new Secret. Keep image-pull credentials current
 as described in the shared credential runbook.
 
-For an AWS CA update, follow [certificate bundle maintenance](certs/README.md).
+For an AWS CA update, follow [certificate bundle maintenance](../../rds-ca/README.md).
 The generated ConfigMap's content hash updates both workload references and
 causes the Deployment to roll out on the next full sync.
 

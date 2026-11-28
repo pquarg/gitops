@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 usage() {
-  printf 'Usage: %s [--environment local|aws] [--no-placeholders]\n' "${0##*/}"
-  printf 'Validate both environments by default; --no-placeholders also rejects deployment placeholders.\n'
+  printf 'Usage: %s [--environment local|aws|prod] [--no-placeholders]\n' "${0##*/}"
+  printf 'Validate all environments by default; --no-placeholders also rejects deployment placeholders.\n'
   printf 'Legacy --ready is an alias for --no-placeholders; neither checks runtime readiness.\n'
 }
 environment=""
@@ -11,7 +11,7 @@ while (( $# )); do
   case "$1" in
     --environment)
       if (( $# < 2 )); then usage >&2; exit 1; fi
-      case "$2" in local|aws) environment="$2" ;; *) usage >&2; exit 1 ;; esac
+      case "$2" in local|aws|prod) environment="$2" ;; *) usage >&2; exit 1 ;; esac
       shift 2 ;;
     --no-placeholders|--ready) no_placeholders=true; shift ;;
     --help|-h) usage; exit 0 ;;
@@ -52,11 +52,11 @@ for app_directory in "${app_directories[@]}"; do
   if (( ${#overlays[@]} == 0 )); then printf 'Error: %s has no environment overlays.\n' "$app_directory" >&2; exit 1; fi
   for overlay in "${overlays[@]}"; do
     overlay_name="${overlay%/}"; overlay_name="${overlay_name##*/}"
-    case "$overlay_name" in local|aws) ;; *) printf 'Error: unknown overlay %s.\n' "$overlay" >&2; exit 1 ;; esac
+    case "$overlay_name" in local|aws|prod) ;; *) printf 'Error: unknown overlay %s.\n' "$overlay" >&2; exit 1 ;; esac
     if [[ ! -f "$overlay/kustomization.yaml" ]]; then printf 'Error: %s needs kustomization.yaml.\n' "$overlay" >&2; exit 1; fi
   done
 done
-environments=(local aws)
+environments=(local aws prod)
 if [[ -n "$environment" ]]; then environments=("$environment"); fi
 for selected in "${environments[@]}"; do
   entries=(apps/*/overlays/"$selected"/kustomization.yaml)

@@ -4,7 +4,20 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/repo/scripts"
+for env in local aws prod; do
+  mkdir -p "$tmp/repo/apps/demo-api/overlays/$env"
+  touch "$tmp/repo/apps/demo-api/overlays/$env/kustomization.yaml"
+done
 cp "$root/scripts/bootstrap.sh" "$root/scripts/check-gateway.py" "$tmp/repo/scripts/"
+cat > "$tmp/repo/scripts/check-bootstrap-ref.py" <<'FAKE'
+import sys
+print("main" if sys.argv[1] == "prod" else "dev", "abc123")
+FAKE
+cat > "$tmp/bin/aws" <<'FAKE'
+#!/usr/bin/env bash
+printf 'https://expected.eks.amazonaws.com\n'
+FAKE
+chmod +x "$tmp/bin/aws"
 export GATEWAY_FIXTURE="$root/tests/gateway-status.py"
 cat > "$tmp/repo/scripts/validate.sh" <<'FAKE'
 #!/usr/bin/env bash
@@ -16,6 +29,10 @@ cat > "$tmp/bin/kubectl" <<'FAKE'
 printf 'kubectl' >> "$LOG"
 printf ' <%s>' "$@" >> "$LOG"
 printf '\n' >> "$LOG"
+if [[ "$*" == *'config view --minify'* ]]; then
+  if [[ "$CASE" == wrong-context ]]; then echo https://wrong.eks.amazonaws.com
+  else echo https://expected.eks.amazonaws.com; fi
+fi
 if [[ "$*" == *'rollout status'* && "$CASE" == controller ]]; then exit 42; fi
 if [[ "$*" == *'get ingressclass traefik'* && "$CASE" != class ]]; then echo traefik.io/ingress-controller; fi
 if [[ "$*" == *'get ingressclass alb'* && "$CASE" != class ]]; then echo ingress.k8s.aws/alb; fi
@@ -23,7 +40,7 @@ if [[ "$*" == *'get application bootstrap '* ]]; then
   if [[ "$CASE" == wrong-bootstrap ]]; then echo bootstrap:argocd/other; fi
   if [[ "$CASE" == bootstrap-without-path ]]; then echo bootstrap:; fi
   if [[ "$CASE" == existing-bootstrap ]]; then
-    if [[ "$*" == *'--context=kind-selected'* ]]; then echo bootstrap:argocd/local
+    if [[ "$*" == *'--context=kind-deployment'* ]]; then echo bootstrap:argocd/local
     else echo bootstrap:argocd/aws; fi
   fi
 fi
@@ -54,20 +71,23 @@ run() {
   CASE="$1" PATH="$tmp/bin:$PATH" LOG="$tmp/log" KUBECONFIG=/ambient \
     bash "$tmp/repo/scripts/bootstrap.sh" "${@:2}" > "$tmp/out" 2>&1 || result=$?
 }
-for env in local aws; do
-  context=selected; bootstrap_file=aws.yaml; platform=aws-load-balancer-controller
-  if [[ "$env" == local ]]; then context=kind-selected; bootstrap_file=local.yaml; platform=traefik; fi
+for env in local aws prod; do
+  context=selected; bootstrap_file="$env.yaml"; platform=aws-load-balancer-controller
+  if [[ "$env" == local ]]; then context=kind-deployment; bootstrap_file=local.yaml; platform=traefik; fi
   for scenario in success existing-bootstrap unprefixed-app validation controller class unaccepted unresolved stale wrong-bootstrap bootstrap-without-path legacy-root legacy-local-set legacy-aws-set legacy-local-app legacy-aws-app legacy-query-error previous-app; do
-    if [[ "$env:$scenario" == aws:unresolved ]]; then continue; fi
+    if [[ "$env" != local && "$scenario" == unresolved ]]; then continue; fi
+    if [[ "$env" == prod && "$scenario" == existing-bootstrap ]]; then continue; fi
     run "$scenario" --environment "$env" --context "$context" --kubeconfig '/tmp/selected config'
     if [[ "$scenario" == success || "$scenario" == existing-bootstrap || "$scenario" == unprefixed-app ]]; then
       [[ "$result" == 0 ]] || fail "$env success"
       awk 'NR==1 && !/^validate/ {exit 1} /<apply>/ {if (!controller) exit 1; applies++} /rollout/ {controller=1} END {if (applies!=1) exit 1}' "$tmp/log" || fail ordering
       grep -q "bootstrap/$bootstrap_file>" "$tmp/log" || fail 'wrong environment bootstrap'
+      grep -q '<application/demo-api>' "$tmp/log" || fail 'must wait for generated Application revisions'
+      grep -q '<applicationset/apps>' "$tmp/log" || fail 'must wait for ApplicationSet revisions'
       grep -q '<application/bootstrap>' "$tmp/log" || fail 'must wait for the bootstrap Application'
       grep -q "rollout.*deployment/$platform" "$tmp/log" || fail 'platform readiness missing'
       grep -q "validate --environment $env" "$tmp/log" || fail 'validation environment missing'
-      if [[ "$env" == aws ]]; then
+      if [[ "$env" != local ]]; then
         grep -q -- '--no-placeholders' "$tmp/log" || fail 'AWS placeholder check missing'
         if grep -q 'traefik\|get pvc' "$tmp/log"; then fail 'AWS must not inspect local storage'; fi
       elif grep -q 'aws-load-balancer-controller' "$tmp/log"; then fail 'local must not inspect AWS'; fi
@@ -85,15 +105,18 @@ for env in local aws; do
       fi
       if [[ "$scenario" == class ]]; then
         infrastructure_target=local
-        if [[ "$env" == aws ]]; then infrastructure_target=aws/dev; fi
+        if [[ "$env" != local ]]; then infrastructure_target=aws/dev; fi
         grep -q "infra/environments/$infrastructure_target first" "$tmp/out" || fail 'current infrastructure prerequisite path'
       fi
     fi
   done
 done
-for arguments in '' '--context selected' '--environment local' '--environment local --context selected' '--environment aws --context kind-selected' '--environment unknown --context selected' '--environment aws --context' '--environment aws --context selected --kubeconfig /one:/two'; do
+for arguments in '' '--context selected' '--environment local' '--environment local --context selected' '--environment aws --context kind-deployment' '--environment unknown --context selected' '--environment aws --context' '--environment aws --context selected --kubeconfig /one:/two'; do
   # Intentional word splitting: each test case above is a fixed option sequence.
   run missing $arguments
   [[ "$result" != 0 && ! -s "$tmp/log" ]] || fail "reject before validation: $arguments"
 done
+run wrong-context --environment prod --context selected --kubeconfig /selected
+[[ "$result" != 0 ]] || fail 'reject wrong AWS endpoint'
+if grep -q '<apply>' "$tmp/log"; then fail 'wrong endpoint must stop registration'; fi
 printf 'GitOps environment selection, bootstrap safety and forwarding tests passed.\n'

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 usage() {
-  printf 'Usage: %s --environment local|aws --context CONTEXT [--kubeconfig PATH]\n' "${0##*/}"
+  printf 'Usage: %s --environment local|aws|prod --context CONTEXT [--kubeconfig PATH]\n' "${0##*/}"
   printf 'Validate and register one environment on an existing platform; app readiness is separate.\n'
 }
 environment=""
@@ -25,15 +25,15 @@ if [[ -z "$context" ]]; then usage >&2; exit 1; fi
 bootstrap_name=bootstrap
 case "$environment" in
   local)
-    if [[ "$context" != kind-* ]]; then
-      printf 'Error: local registration requires an explicit kind-* context.\n' >&2; exit 1
+    if [[ "$context" != kind-deployment ]]; then
+      printf 'Error: local registration requires the kind-deployment context.\n' >&2; exit 1
     fi
     bootstrap_file=local.yaml ;;
-  aws)
+  aws|prod)
     if [[ "$context" == kind-* ]]; then
       printf 'Error: AWS registration cannot target a kind context.\n' >&2; exit 1
     fi
-    bootstrap_file=aws.yaml ;;
+    bootstrap_file="$environment.yaml" ;;
   *) usage >&2; exit 1 ;;
 esac
 # Select one file consistently instead of an ambient kubeconfig list.
@@ -42,9 +42,26 @@ if [[ "$kubeconfig" == *:* ]]; then
 fi
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 validation_args=(--environment "$environment")
-if [[ "$environment" == aws ]]; then validation_args+=(--no-placeholders); fi
+if [[ "$environment" != local ]]; then validation_args+=(--no-placeholders); fi
 "$project_root/scripts/validate.sh" "${validation_args[@]}"
+published="$(python3 "$project_root/scripts/check-bootstrap-ref.py" "$environment")"
+read -r branch revision <<< "$published"
 kube=(kubectl "--kubeconfig=$kubeconfig" "--context=$context")
+if [[ "$environment" != local ]]; then
+  profile=aws-project
+  cluster=deployment-project-dev
+  if [[ "$environment" == prod ]]; then
+    profile=aws-project-prod
+    cluster=deployment-project-prod
+  fi
+  endpoint="$(aws --profile "$profile" --region eu-north-1 eks describe-cluster \
+    --name "$cluster" --query cluster.endpoint --output text)"
+  selected="$("${kube[@]}" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+  if [[ -z "$endpoint" || "$selected" != "$endpoint" ]]; then
+    printf 'Error: context does not select %s.\n' "$cluster" >&2
+    exit 1
+  fi
+fi
 "${kube[@]}" get nodes > /dev/null
 "${kube[@]}" -n argocd wait --for=condition=Established \
   crd/applications.argoproj.io crd/applicationsets.argoproj.io --timeout=120s
@@ -86,10 +103,23 @@ else
   "${kube[@]}" -n kube-system rollout status deployment/aws-load-balancer-controller --timeout=300s
   python3 "$project_root/scripts/check-gateway.py" --environment aws --context "$context" --kubeconfig "$kubeconfig"
 fi
-printf 'Registering %s applications from gitops/main\n' "$environment"
+printf 'Registering %s applications from %s (%s)\n' "$environment" "$branch" "$revision"
 "${kube[@]}" -n argocd apply -f "$project_root/bootstrap/$bootstrap_file"
+"${kube[@]}" -n argocd wait --for="jsonpath={.status.sync.revision}=$revision" \
+  "application/$bootstrap_name" --timeout=300s
 "${kube[@]}" -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced \
   "application/$bootstrap_name" --timeout=300s
+for selector in '.spec.generators[0].git.revision' '.spec.template.spec.source.targetRevision'; do
+  "${kube[@]}" -n argocd wait --for="jsonpath={$selector}=$branch" \
+    applicationset/apps --timeout=300s
+done
+for overlay in "$project_root"/apps/*/overlays/"$environment"/kustomization.yaml; do
+  app_path="${overlay%/overlays/*}"
+  app="${app_path##*/}"
+  "${kube[@]}" -n argocd wait --for=create "application/$app" --timeout=300s
+  "${kube[@]}" -n argocd wait --for="jsonpath={.spec.source.targetRevision}=$branch" \
+    "application/$app" --timeout=300s
+done
 if [[ "$environment" == local ]]; then
   printf 'Registrations synced. Automatic app syncs, migrations and rollouts continue through Argo CD.\n'
 else

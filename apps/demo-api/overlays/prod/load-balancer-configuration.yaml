@@ -1,0 +1,12 @@
+apiVersion: gateway.k8s.aws/v1
+kind: LoadBalancerConfiguration
+metadata:
+  name: demo-api
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  loadBalancerName: prod-demo-api
+  scheme: internal
+  ipAddressType: ipv4
+  securityGroups: [deployment-project-prod-myfastapiapp-alb]
+  manageBackendSecurityGroupRules: true

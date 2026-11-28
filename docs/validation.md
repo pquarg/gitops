@@ -14,13 +14,13 @@ Run from this repository, or invoke the script by its absolute path:
 git diff --check
 ```
 
-By default both overlays and both environment-specific registrations are rendered.
+By default all app overlays and environment-specific registrations are rendered.
 The validator checks app names, base/overlay entry points, Bash syntax, bootstrap
 failure/selection behavior, credential helper tests and strict schemas. Additional
 regression checks protect external-database ownership, AWS/local resource
 isolation, sync policies and matching API/migration images. `--environment`
 selects the rendered resources for schema/placeholder checking; the shared safety
-regression checks still cover both environments.
+regression checks still cover all environments.
 
 `--no-placeholders` rejects `REPLACE_...` values and reserved example domains in rendered
 manifests. Empty Secret examples are deliberately excluded. Strict kubeconform
@@ -39,6 +39,7 @@ context explicitly:
 ```sh
 ./scripts/validate-server.sh demo-api --environment local --context kind-deployment
 ./scripts/validate-server.sh demo-api --environment aws --context aws-deployment-project
+./scripts/validate-server.sh demo-api --environment prod --context aws-deployment-project-prod
 ```
 
 `--kubeconfig /absolute/file` is also supported. The script dry-runs ordinary

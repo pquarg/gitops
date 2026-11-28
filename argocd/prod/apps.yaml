@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: git@github.com:pquarg/gitops.git
+        revision: main
+        directories:
+          - path: apps/*/overlays/prod
+  ignoreApplicationDifferences:
+    - jsonPointers:
+        # Allow database maintenance to pause an app's automatic sync.
+        - /spec/syncPolicy/automated
+  syncPolicy:
+    preserveResourcesOnDeletion: true
+  template:
+    metadata:
+      name: '{{index .path.segments 1}}'
+      namespace: argocd
+    spec:
+      project: default
+      source:
+        repoURL: git@github.com:pquarg/gitops.git
+        targetRevision: main
+        path: '{{.path.path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{index .path.segments 1}}'
+      syncPolicy:
+        # Sync apps manually at first, including the database migration hook.
+        syncOptions:
+          - CreateNamespace=true

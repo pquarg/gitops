@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 usage() {
-  printf 'Usage: %s APP --environment local|aws --context CONTEXT [--kubeconfig PATH]\n' "${0##*/}"
+  printf 'Usage: %s APP --environment local|aws|prod --context CONTEXT [--kubeconfig PATH]\n' "${0##*/}"
   printf 'Server dry-run only; requires the app namespace and cluster CRDs.\n'
 }
 if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then usage; exit 0; fi
@@ -17,9 +17,9 @@ while (( $# )); do
     *) usage >&2; exit 1 ;;
   esac
 done
-case "$environment" in local|aws) ;; *) usage >&2; exit 1 ;; esac
+case "$environment" in local|aws|prod) ;; *) usage >&2; exit 1 ;; esac
 if [[ -z "$context" || "$kubeconfig" == *:* ]]; then usage >&2; exit 1; fi
-if [[ "$environment" == local && "$context" != kind-* ]] || [[ "$environment" == aws && "$context" == kind-* ]]; then
+if [[ "$environment" == local && "$context" != kind-* ]] || [[ "$environment" != local && "$context" == kind-* ]]; then
   printf 'Error: environment and context disagree.\n' >&2; exit 1
 fi
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"

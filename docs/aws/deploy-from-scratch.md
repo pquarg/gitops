@@ -90,7 +90,7 @@ Git keys, tokens, real `.tfvars`, plans and state stay outside Git.
 ./scripts/validate.sh
 ./scripts/validate.sh --environment aws --no-placeholders
 git diff --check
-# After reviewing and publishing the deployment manifests to main:
+# After reviewing and publishing the deployment manifests to dev:
 ./scripts/bootstrap.sh --environment aws --context "$EKS_CONTEXT"
 ```
 

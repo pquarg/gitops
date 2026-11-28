@@ -1,4 +1,4 @@
-# Set up AWS deployments
+# Set up AWS staging
 
 For the complete infrastructure-to-public-HTTPS walkthrough, use
 [deploy from start to finish](deploy-from-scratch.md). This page is the shorter
@@ -8,7 +8,8 @@ Run commands from this repository root. Install AWS CLI v2, kubectl, Python 3,
 and the [validation tools](validation.md). Complete the
 [infrastructure contract](infrastructure.md) in `infra/environments/aws/dev` first.
 
-GitOps `--environment aws` maps to infrastructure `--environment aws/dev`.
+GitOps `--environment aws` maps to infrastructure `--environment aws/dev` and tracks
+GitOps `dev`. Use the [production runbook](../production/setup.md) for production.
 
 ## 1. Select the project and cluster
 
@@ -73,7 +74,7 @@ There is no Postgres Pod, PVC or laptop storage to provision here.
 git diff --check
 ```
 
-Review, commit and push the configuration to `gitops/main`. Argo CD reads
+Review, commit and push the configuration to `gitops/dev` and check out its published tip. Argo CD reads
 GitHub and cannot deploy unpushed local changes. Then register the bootstrap Application:
 
 ```sh

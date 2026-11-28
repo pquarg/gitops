@@ -34,7 +34,7 @@ See the [infrastructure contract](infrastructure.md) for the full handoff.
 ```mermaid
 flowchart TD
     Operator[Operator runs bootstrap.sh with AWS environment and context] --> Bootstrap[bootstrap Application]
-    Git[gitops on GitHub: main] --> Bootstrap
+    Git[gitops on GitHub: dev] --> Bootstrap
     Bootstrap --> Registrations[argocd/aws Kustomization]
     Registrations --> AppSet[apps ApplicationSet]
     Git --> AppSet
@@ -49,11 +49,11 @@ flowchart TD
 ```
 
 The registration chain starts at [bootstrap/aws.yaml](../../bootstrap/aws.yaml). It defines
-the `bootstrap` Argo CD Application on EKS, which reads `argocd/aws/` from GitHub `main`.
+the `bootstrap` Argo CD Application on EKS, which reads `argocd/aws/` from GitHub `dev`.
 The bootstrap Application automatically syncs registrations and corrects drift in them.
 
 [argocd/aws/apps.yaml](../../argocd/aws/apps.yaml) defines an **ApplicationSet**, a template
-that discovers each `apps/*/overlays/aws` directory on `main`. For each
+that discovers each `apps/*/overlays/aws` directory on `dev`. For each
 entry it extracts the app name from path segment 1 and generates an Argo CD
 Application named `<app>` targeting namespace `<app>`. Today this produces `demo-api` in the Argo CD
 namespace, deploying workloads into namespace `demo-api`.
@@ -67,7 +67,7 @@ an operator reviews the diff and starts the app sync.
 `--environment aws --context CONTEXT`, validates the manifests,
 checks the existing platform components and registers `bootstrap`. It requires an
 explicit Kubernetes context. It does not provision the platform or start the
-app's manual sync. Argo CD reads the published `main` branch, so local edits must
+app's manual sync. Argo CD reads the published `dev` branch, so local edits must
 be pushed before they can be deployed.
 
 ## What is deployed for demo-api

@@ -3,7 +3,7 @@
 Run from `gitops`, targeting `kind-deployment`. The React UI and read-only API
 share http://reaction-explorer.localhost. This release is local only and uses a
 locally built/loaded image. The existing ApplicationSet discovers it from published
-`main` and syncs automatically. Complete preparation before publishing this overlay.
+`dev` by default and syncs automatically. Complete preparation before publishing this overlay.
 
 ## Prepare
 

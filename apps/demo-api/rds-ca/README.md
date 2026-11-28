@@ -15,7 +15,7 @@ bundle_file="$(mktemp)"
 curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
   -o "$bundle_file" &&
   openssl crl2pkcs7 -nocrl -certfile "$bundle_file" -out /dev/null &&
-  mv "$bundle_file" apps/demo-api/overlays/aws/certs/global-bundle.pem &&
+  mv "$bundle_file" apps/demo-api/rds-ca/global-bundle.pem &&
   ./scripts/validate.sh --environment aws --no-placeholders
 ```
 

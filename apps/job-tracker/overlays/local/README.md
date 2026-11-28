@@ -1,7 +1,7 @@
 # Local job tracker release
 
 Run from the GitOps checkout. This overlay is local only, uses context
-`kind-deployment`, and is discovered automatically from published `main`.
+`kind-deployment`, and is discovered automatically from the published `dev` branch by default.
 The app is at http://job-tracker.localhost. Traefik sends `/api/` unchanged to
 FastAPI and `/` to the static frontend; demo-api and Mailpit keep their routes.
 

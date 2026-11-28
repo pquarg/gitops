@@ -9,7 +9,7 @@ Add `apps/<app>/overlays/local/kustomization.yaml` and/or
 selects its release image and adds environment configuration and routing. Local
 overlays use HTTPRoutes and require their app namespace in infra's allowed-route
 selector; AWS uses a per-app Gateway/HTTPRoute and LoadBalancer/TargetGroupConfiguration.
-An app can opt into one or both environments; creating a base alone deploys nothing.
+An app can opt into one or more environments; creating a base alone deploys nothing.
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1

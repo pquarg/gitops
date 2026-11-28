@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - ../../rds-ca
+  - gateway.yaml
+  - httproute.yaml
+  - load-balancer-configuration.yaml
+  - target-group-configuration.yaml
+images:
+  # Sets the release image for both the API Deployment and migration Job.
+  - name: ghcr.io/pquarg/demo-api
+    # Reserved until a staging release is approved for first deployment.
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+patches:
+  - path: workload-patch.yaml

@@ -1,5 +1,7 @@
 """Check environment isolation, external databases and selected release images."""
 import json
+import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -20,13 +22,15 @@ def render(path):
     return {(r['kind'], r['metadata']['name']): r for r in resources}
 
 
-for env in ('local', 'aws'):
+images = {}
+for env in ('local', 'aws', 'prod'):
     resources = render(f'apps/demo-api/overlays/{env}')
     assert resources['ConfigMap', 'demo-api-config']['data']['APP_MESSAGE'] == 'Hello from FastAPI!'
     deployment = resources['Deployment', 'demo-api']
     migration = resources['Job', 'demo-api-migrate']
     api_image = deployment['spec']['template']['spec']['containers'][0]['image']
     job_image = migration['spec']['template']['spec']['containers'][0]['image']
+    images[env] = api_image
     assert api_image == job_image, f'{env}: API and migration must use the same release'
     assert migration['metadata']['annotations']['argocd.argoproj.io/hook'] == 'Sync'
     if env == 'local':
@@ -51,8 +55,12 @@ for env in ('local', 'aws'):
         assert gateway['spec']['infrastructure']['parametersRef'] == {'group': 'gateway.k8s.aws', 'kind': 'LoadBalancerConfiguration', 'name': 'demo-api'}
         assert gateway['spec']['listeners'] == [{'name': 'web', 'port': 80, 'protocol': 'HTTP', 'allowedRoutes': {'namespaces': {'from': 'Same'}, 'kinds': [{'group': 'gateway.networking.k8s.io', 'kind': 'HTTPRoute'}]}}]
         lb = resources['LoadBalancerConfiguration', 'demo-api']
-        assert {k: lb['spec'][k] for k in ('loadBalancerName', 'scheme', 'ipAddressType', 'manageBackendSecurityGroupRules')} == {'loadBalancerName': 'dev-demo-api', 'scheme': 'internal', 'ipAddressType': 'ipv4', 'manageBackendSecurityGroupRules': True}
+        assert {k: lb['spec'][k] for k in ('loadBalancerName', 'scheme', 'ipAddressType', 'manageBackendSecurityGroupRules')} == {'loadBalancerName': 'prod-demo-api' if env == 'prod' else 'dev-demo-api', 'scheme': 'internal', 'ipAddressType': 'ipv4', 'manageBackendSecurityGroupRules': True}
         assert len(lb['spec']['securityGroups']) == 1
+        if env == 'prod':
+            assert lb['spec']['securityGroups'] == ['deployment-project-prod-myfastapiapp-alb']
+            assert deployment['spec']['replicas'] == 2
+            assert re.fullmatch(r'ghcr\.io/pquarg/demo-api@sha256:[0-9a-f]{64}', api_image)
         tg = resources['TargetGroupConfiguration', 'demo-api']
         assert tg['spec']['targetReference'] == {'group': '', 'kind': 'Service', 'name': 'demo-api'}
         assert tg['spec']['defaultConfiguration'] == {'targetType': 'ip', 'protocol': 'HTTP', 'healthCheckConfig': {'healthCheckPath': '/ready', 'healthCheckProtocol': 'HTTP', 'matcher': {'httpCode': '200'}}}
@@ -91,9 +99,33 @@ for env in ('local', 'aws'):
     assert root['spec']['syncPolicy']['automated']['enabled'] is True
     assert root['spec']['source']['path'] == f'argocd/{env}'
     assert root['spec']['source']['repoURL'] == generator['repoURL']
+    revision = root['spec']['source']['targetRevision']
+    assert generator['revision'] == template['source']['targetRevision'] == revision
+    if env == 'local':
+        assert revision == 'dev' or re.fullmatch(r'feat/[A-Za-z0-9._/-]+', revision)
+        if os.environ.get('GITHUB_BASE_REF') in ('dev', 'main') or os.environ.get('GITHUB_REF') in ('refs/heads/dev', 'refs/heads/main'):
+            assert revision == 'dev', 'Feature routing belongs on the local deployment branch only'
+    else:
+        assert revision == ('main' if env == 'prod' else 'dev')
     assert appset['spec']['template']['metadata']['name'] == '{{index .path.segments 1}}'
     assert 'environment' not in appset['spec']['template']['metadata'].get('labels', {})
     assert bool(template['syncPolicy'].get('automated')) == (env == 'local')
+if os.environ.get('GITHUB_BASE_REF') == 'main':
+    assert os.environ.get('GITHUB_HEAD_REF') == 'dev', 'Production promotions must come from dev'
+    base_sha = os.environ.get('PRODUCTION_BASE_SHA')
+    if images['prod'].endswith(':' + '0' * 64):
+        if base_sha:
+            previous = subprocess.run(
+                ['git', 'show', f'{base_sha}:apps/demo-api/overlays/prod/kustomization.yaml'],
+                cwd=ROOT, capture_output=True, text=True,
+            )
+            if previous.returncode == 0:
+                assert 'sha256:' + '0' * 64 in previous.stdout, 'Keep an approved production digest'
+            else:
+                subprocess.run(['git', 'cat-file', '-e', f'{base_sha}^{{commit}}'], cwd=ROOT, check=True)
+    else:
+        assert images['prod'] == images['aws'], 'Promote the exact staging image digest'
+
 print('Rendered environment isolation, external database and image consistency checks passed.')
 
 tracker = render('apps/job-tracker/overlays/local')

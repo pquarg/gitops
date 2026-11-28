@@ -93,8 +93,10 @@ git diff --check
 
 Review, commit and push any manifest changes. Keep filled Secrets ignored;
 applying or rotating credentials does not require committing them.
-Argo CD reads GitHub `main`; it cannot deploy manifests that exist only in this
-checkout. With the platform and credentials ready:
+Argo CD reads the published `dev` branch by default. [Local feature testing](../release-promotion.md#test-a-feature-in-kind)
+uses an explicitly selected published `feat/*` branch. Check out the clean,
+published tip of the intended branch before registering. With the platform and
+credentials ready:
 
 ```sh
 ./scripts/bootstrap.sh --environment local --context kind-deployment
